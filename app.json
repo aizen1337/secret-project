@@ -2,9 +2,13 @@
   "expo": {
     "scheme": "myapp",
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-maps"
     ],
     "name": "secret-project",
-    "slug": "secret-project"
+    "slug": "secret-project",
+    "web": {
+      "bundler": "metro"
+    }
   }
 }
