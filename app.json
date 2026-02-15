@@ -3,12 +3,16 @@
     "scheme": "myapp",
     "plugins": [
       "expo-router",
-      "expo-maps"
+      "expo-maps",
+      "expo-web-browser",
+      "expo-font",
+      "@react-native-community/datetimepicker"
     ],
     "name": "secret-project",
     "slug": "secret-project",
     "web": {
       "bundler": "metro"
-    }
+    },
+    "userInterfaceStyle": "dark"
   }
 }

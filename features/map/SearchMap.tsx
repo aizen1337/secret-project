@@ -1,6 +1,6 @@
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
-import { View, Pressable } from "react-native";
-import { Text } from "@/components/ui/text";
+import { Platform } from "react-native";
+import type { ReactElement } from "react";
+
 export type CarLocation = {
   id: string;
   latitude: number;
@@ -8,7 +8,7 @@ export type CarLocation = {
   pricePerDay: number;
 };
 
-type SearchMapProps = {
+export type SearchMapProps = {
   region: {
     latitude: number;
     longitude: number;
@@ -17,41 +17,18 @@ type SearchMapProps = {
   };
   cars: CarLocation[];
   onPress?: () => void;
+  containerClassName?: string;
+  interactive?: boolean;
+  selectedCarId?: string | null;
+  onMarkerPress?: (carId: string) => void;
 };
 
-export function SearchMap({ region, cars, onPress }: SearchMapProps) {
-  return (
-    <Pressable onPress={onPress}>
-      <View className="h-40 w-full rounded-xl overflow-hidden">
-        <MapView
-          provider={PROVIDER_GOOGLE}
-          style={{ flex: 1 }}
-          region={region}
-          scrollEnabled={false}
-          zoomEnabled={false}
-          rotateEnabled={false}
-          pitchEnabled={false}
-        >
-          {cars.map((car) => (
-            <Marker
-              key={car.id}
-              coordinate={{
-                latitude: car.latitude,
-                longitude: car.longitude,
-              }}
-            >
-              {/* Airbnb-style price pill */}
-              <View className="px-2 py-1 rounded-full bg-white shadow">
-                <View>
-                  <Text className="text-xs font-semibold">
-                    ${car.pricePerDay}
-                  </Text>
-                </View>
-              </View>
-            </Marker>
-          ))}
-        </MapView>
-      </View>
-    </Pressable>
-  );
-}
+type SearchMapComponent = (props: SearchMapProps) => ReactElement;
+
+// Avoid static imports so native builds don't load web-only map dependencies.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const SearchMapImpl: SearchMapComponent = (Platform.OS === "web"
+  ? require("./SearchMap.web").SearchMap
+  : require("./SearchMap.native").SearchMap) as SearchMapComponent;
+
+export const SearchMap = SearchMapImpl;

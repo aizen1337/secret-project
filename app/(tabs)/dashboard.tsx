@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
 import { api } from "@/convex/_generated/api";
 import { useQuery } from "convex/react";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function DashboardScreen() {
   const { isLoaded, isSignedIn } = useAuth();
@@ -29,17 +30,17 @@ export default function DashboardScreen() {
 
   if (!isLoaded) {
     return (
-      <View className="flex-1 bg-background">
+      <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-base text-muted-foreground">Loading...</Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!isSignedIn) {
     return (
-      <View className="flex-1 bg-background">
+      <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
         <View className="flex-1 items-center justify-center px-6">
           <View className="w-20 h-20 bg-secondary rounded-full items-center justify-center mb-4">
             <Ionicons name="grid-outline" size={40} color="#737373" />
@@ -58,12 +59,12 @@ export default function DashboardScreen() {
             </Pressable>
           </Link>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-4 pt-3 pb-8">
           <View className="flex-row items-center justify-between mb-5">
@@ -203,6 +204,6 @@ export default function DashboardScreen() {
           )}
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }

@@ -1,19 +1,21 @@
 import { useSSO, useSignIn } from '@clerk/clerk-expo'
 import type { EmailCodeFactor } from '@clerk/types'
+import * as AuthSession from 'expo-auth-session'
 import { Link, useRouter } from 'expo-router'
-import * as React from 'react'
-import { Alert, Pressable, ScrollView, TextInput, View, Platform } from 'react-native'
-import { Text } from '@/components/ui/text'
-import * as WebBrowser from 'expo-web-browser'
 import { Ionicons } from '@expo/vector-icons'
-import * as Linking from 'expo-linking'
+import * as React from 'react'
+import { Alert, Platform, Pressable, ScrollView, TextInput, View } from 'react-native'
+import * as WebBrowser from 'expo-web-browser'
+
+import { Text } from '@/components/ui/text'
 
 WebBrowser.maybeCompleteAuthSession()
 
 export default function Page() {
   const { signIn, setActive, isLoaded } = useSignIn()
   const router = useRouter()
-  const redirectUrl = Linking.createURL('/sso-callback')
+  const redirectUrl = AuthSession.makeRedirectUri({ path: 'sso-callback' })
+  const redirectUrlComplete = '/(tabs)'
   const { startSSOFlow } = useSSO()
 
   const [emailAddress, setEmailAddress] = React.useState('')
@@ -114,29 +116,39 @@ export default function Page() {
 
   const onSocialPress = React.useCallback(
     async (provider: 'google' | 'apple' | 'facebook') => {
+      if (!isLoaded) return
+
+      const strategy =
+        provider === 'google'
+          ? 'oauth_google'
+          : provider === 'apple'
+            ? 'oauth_apple'
+            : 'oauth_facebook'
+
       try {
-        const { createdSessionId, setActive, authSessionResult } =
-          await startSSOFlow({
-            strategy:
-              provider === 'google'
-                ? 'oauth_google'
-                : provider === 'apple'
-                  ? 'oauth_apple'
-                  : 'oauth_facebook',
-            ...(Platform.OS === 'web' ? { redirectUrl } : {}),
+        if (Platform.OS === 'web') {
+          await signIn.authenticateWithRedirect({
+            strategy,
+            redirectUrl,
+            redirectUrlComplete,
           })
+          return
+        }
+
+        const { createdSessionId, setActive, authSessionResult } = await startSSOFlow({
+          strategy,
+          redirectUrl,
+        })
+
         if (createdSessionId) {
           await setActive?.({ session: createdSessionId })
           router.replace('/(tabs)')
         } else {
           const cancelled =
-            authSessionResult?.type === 'cancel' ||
-            authSessionResult?.type === 'dismiss'
+            authSessionResult?.type === 'cancel' || authSessionResult?.type === 'dismiss'
           Alert.alert(
             cancelled ? 'Sign in cancelled' : 'Sign in failed',
-            cancelled
-              ? 'You cancelled the sign in flow.'
-              : 'Please try again.',
+            cancelled ? 'You cancelled the sign in flow.' : 'Please try again.',
           )
         }
       } catch (err) {
@@ -144,7 +156,7 @@ export default function Page() {
         Alert.alert('Sign in failed', 'Please try again.')
       }
     },
-    [redirectUrl, router, startSSOFlow],
+    [isLoaded, redirectUrl, redirectUrlComplete, router, signIn, startSSOFlow],
   )
 
   // Display email code verification form

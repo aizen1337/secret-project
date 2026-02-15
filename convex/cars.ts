@@ -30,9 +30,17 @@ export const createCar = mutation({
   },
 });
 export const listCurrentlyAvailableCars = query({
-  args: {},
-  async handler(ctx) {
-    const now = new Date().toISOString();
+  args: {
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+  },
+  async handler(ctx, args) {
+    const startDate = args.startDate ?? new Date().toISOString();
+    const endDate = args.endDate ?? startDate;
+
+    if (new Date(startDate).getTime() > new Date(endDate).getTime()) {
+      throw new Error("Invalid date range");
+    }
 
     const cars = await ctx.db
       .query("cars")
@@ -51,8 +59,8 @@ export const listCurrentlyAvailableCars = query({
               q.eq(q.field("status"), "pending"),
               q.eq(q.field("status"), "confirmed")
             ),
-            q.lte(q.field("startDate"), now),
-            q.gte(q.field("endDate"), now)
+            q.lte(q.field("startDate"), endDate),
+            q.gte(q.field("endDate"), startDate)
           )
         )
         .first();
@@ -69,10 +77,26 @@ export const listCurrentlyAvailableCars = query({
 export const listHostCars = query({
   args: {},
   async handler(ctx) {
-    const host = await mapHost(ctx);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", q => q.eq("clerkUserId", identity.subject))
+      .first();
+
+    if (!user) return [];
+
+    const host = await ctx.db
+      .query("hosts")
+      .withIndex("by_user", q => q.eq("userId", user._id))
+      .first();
+
+    if (!host) return [];
+
     return await ctx.db
       .query("cars")
-      .withIndex("by_host", (q) => q.eq("hostId", host._id))
+      .withIndex("by_host", q => q.eq("hostId", host._id))
       .collect();
   },
 });
