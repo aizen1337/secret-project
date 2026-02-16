@@ -17,6 +17,7 @@ import type * as seeders_cars from "../seeders/cars.js";
 import type * as seeders_helpers from "../seeders/helpers.js";
 import type * as seeders_index from "../seeders/index.js";
 import type * as seeders_reviews from "../seeders/reviews.js";
+import type * as stripe from "../stripe.js";
 import type * as userMapper from "../userMapper.js";
 import type * as users from "../users.js";
 
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   "seeders/helpers": typeof seeders_helpers;
   "seeders/index": typeof seeders_index;
   "seeders/reviews": typeof seeders_reviews;
+  stripe: typeof stripe;
   userMapper: typeof userMapper;
   users: typeof users;
 }>;

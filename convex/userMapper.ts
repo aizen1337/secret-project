@@ -11,12 +11,17 @@ export async function mapClerkUser(ctx: any) {
     .first();
 
   if (!user) {
-    user = await ctx.db.insert("users", {
+    const userId = await ctx.db.insert("users", {
       clerkUserId,
       name: identity.name ?? "Anonymous",
       imageUrl: identity.pictureUrl,
       createdAt: Date.now(),
     });
+    user = await ctx.db.get(userId);
+  }
+
+  if (!user) {
+    throw new Error("Failed to map user.");
   }
 
   return user;

@@ -19,10 +19,11 @@ type CarCardProps = {
   highlighted?: boolean;
 };
 
-export function CarCard({ car, highlighted = false }: CarCardProps) {
+export function CarCard({ car, onPress, highlighted = false }: CarCardProps) {
   return (
     <Link href={`/car/${car.id}`} asChild>
       <Pressable
+        onPress={onPress}
         className={`bg-card rounded-xl overflow-hidden mb-4 shadow-sm border ${
           highlighted ? "border-primary border-2 shadow-md" : "border-border"
         }`}

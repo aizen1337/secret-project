@@ -9,11 +9,16 @@ export async function mapHost(ctx: any) {
     .first();
 
   if (!host) {
-    host = await ctx.db.insert("hosts", {
+    const hostId = await ctx.db.insert("hosts", {
       userId: user._id,
       isVerified: false,
       createdAt: Date.now(),
     });
+    host = await ctx.db.get(hostId);
+  }
+
+  if (!host) {
+    throw new Error("Failed to map host.");
   }
 
   return host;

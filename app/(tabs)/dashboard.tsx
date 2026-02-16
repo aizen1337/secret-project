@@ -1,7 +1,7 @@
 
 import { useMemo, useState } from "react";
 import { View, Text, ScrollView, Pressable, Image } from "react-native";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
 import { api } from "@/convex/_generated/api";
@@ -9,6 +9,7 @@ import { useQuery } from "convex/react";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function DashboardScreen() {
+  const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
   const [activeTab, setActiveTab] = useState<"listings" | "bookings">("listings");
   const myCars = useQuery(api.cars.listHostCars, isSignedIn ? {} : "skip");
@@ -77,7 +78,10 @@ export default function DashboardScreen() {
               </Text>
             </View>
             <View className="flex-row items-center gap-2">
-              <Pressable className="w-10 h-10 rounded-full bg-card border border-border items-center justify-center">
+              <Pressable
+                onPress={() => router.push("/car/new")}
+                className="w-10 h-10 rounded-full bg-card border border-border items-center justify-center"
+              >
                 <Ionicons name="add" size={20} color="#171717" />
               </Pressable>
               <Link href="/profile" asChild>
@@ -187,7 +191,10 @@ export default function DashboardScreen() {
                   </Text>
                 </View>
               )}
-              <Pressable className="bg-primary py-4 rounded-xl items-center mt-2">
+              <Pressable
+                onPress={() => router.push("/car/new")}
+                className="bg-primary py-4 rounded-xl items-center mt-2"
+              >
                 <Text className="text-primary-foreground font-semibold text-base">
                   Add New Car
                 </Text>

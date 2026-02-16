@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useQuery } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
@@ -18,6 +18,7 @@ import { DateRangePicker } from "@/components/filters/DateRangePicker";
 import { Text } from "@/components/ui/text";
 import { CarCard } from "@/features/cars/components/ui/CarCard";
 import { SearchMap } from "@/features/map/SearchMap";
+import type { CarLocation } from "@/features/map/SearchMap";
 
 type CarItem = {
   id: string;
@@ -60,6 +61,7 @@ function toEndOfDayIso(value: string) {
 }
 
 export default function BrowseCars() {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
   const colorScheme = useColorScheme();
@@ -138,7 +140,7 @@ export default function BrowseCars() {
     return [selected, ...filteredCars.filter((car) => car.id !== selectedCarId)];
   }, [filteredCars, selectedCarId]);
 
-  const mapCars = useMemo(
+  const mapCars = useMemo<CarLocation[]>(
     () =>
       filteredCars
         .filter(
@@ -151,6 +153,12 @@ export default function BrowseCars() {
           latitude: car.location.lat,
           longitude: car.location.lng,
           pricePerDay: car.pricePerDay,
+          title: car.title || `${car.make} ${car.model}`,
+          make: car.make,
+          model: car.model,
+          locationCity: car.location.city,
+          locationCountry: car.location.country,
+          imageUrl: car.images[0] || null,
         })),
     [filteredCars],
   );
@@ -183,6 +191,15 @@ export default function BrowseCars() {
   }, [mapCars, searchedRegion]);
 
   const handleMarkerPress = (carId: string) => {
+    setSelectedCarId(carId);
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  };
+
+  const handleOfferPress = (carId: string) => {
+    router.push(`/car/${carId}`);
+  };
+
+  const handleCarCardPress = (carId: string) => {
     setSelectedCarId(carId);
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
   };
@@ -319,6 +336,7 @@ export default function BrowseCars() {
               interactive={true}
               selectedCarId={selectedCarId}
               onMarkerPress={handleMarkerPress}
+              onOfferPress={handleOfferPress}
               containerClassName="h-full w-full overflow-hidden rounded-xl"
             />
           </View>
@@ -327,7 +345,11 @@ export default function BrowseCars() {
             data={orderedCars}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <CarCard car={item} highlighted={item.id === selectedCarId} />
+              <CarCard
+                car={item}
+                onPress={() => handleCarCardPress(item.id)}
+                highlighted={item.id === selectedCarId}
+              />
             )}
             ListEmptyComponent={
               <View className="py-6">
@@ -350,7 +372,11 @@ export default function BrowseCars() {
                 data={orderedCars}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <CarCard car={item} highlighted={item.id === selectedCarId} />
+                  <CarCard
+                    car={item}
+                    onPress={() => handleCarCardPress(item.id)}
+                    highlighted={item.id === selectedCarId}
+                  />
                 )}
                 ListEmptyComponent={
                   <View className="py-6">
@@ -370,6 +396,7 @@ export default function BrowseCars() {
                 interactive={true}
                 selectedCarId={selectedCarId}
                 onMarkerPress={handleMarkerPress}
+                onOfferPress={handleOfferPress}
                 containerClassName="h-full w-full overflow-hidden rounded-xl"
               />
             </View>

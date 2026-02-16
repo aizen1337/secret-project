@@ -6,6 +6,12 @@ export type CarLocation = {
   latitude: number;
   longitude: number;
   pricePerDay: number;
+  title: string;
+  make: string;
+  model: string;
+  locationCity: string;
+  locationCountry: string;
+  imageUrl: string | null;
 };
 
 export type SearchMapProps = {
@@ -21,6 +27,7 @@ export type SearchMapProps = {
   interactive?: boolean;
   selectedCarId?: string | null;
   onMarkerPress?: (carId: string) => void;
+  onOfferPress?: (carId: string) => void;
 };
 
 type SearchMapComponent = (props: SearchMapProps) => ReactElement;

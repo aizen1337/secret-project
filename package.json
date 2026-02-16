@@ -26,6 +26,7 @@
     "expo-auth-session": "~7.0.10",
     "expo-constants": "~18.0.10",
     "expo-font": "~14.0.11",
+    "expo-image-picker": "~17.0.10",
     "expo-linking": "~8.0.9",
     "expo-maps": "~0.12.10",
     "expo-router": "~6.0.23",

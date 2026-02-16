@@ -1,9 +1,9 @@
 import "leaflet/dist/leaflet.css";
 
 import L from "leaflet";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { View } from "react-native";
-import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 
 import type { SearchMapProps } from "./SearchMap";
 
@@ -78,6 +78,7 @@ export function SearchMap({
   interactive = true,
   selectedCarId,
   onMarkerPress,
+  onOfferPress,
 }: SearchMapProps) {
   const containerClasses = `${
     containerClassName ??
@@ -88,6 +89,18 @@ export function SearchMap({
     () => [region.latitude, region.longitude],
     [region.latitude, region.longitude],
   );
+  const markerRefs = useRef<Record<string, L.Marker | null>>({});
+
+  useEffect(() => {
+    Object.entries(markerRefs.current).forEach(([carId, marker]) => {
+      if (!marker) return;
+      if (selectedCarId && carId === selectedCarId) {
+        marker.openPopup();
+      } else {
+        marker.closePopup();
+      }
+    });
+  }, [selectedCarId]);
 
   return (
     <View className={containerClasses}>
@@ -111,12 +124,97 @@ export function SearchMap({
           {cars.map((car) => (
             <Marker
               key={car.id}
+              ref={(value) => {
+                markerRefs.current[car.id] = value;
+              }}
               position={[car.latitude, car.longitude]}
               icon={createPriceIcon(car.pricePerDay, selectedCarId === car.id)}
               eventHandlers={{
                 click: () => onMarkerPress?.(car.id),
               }}
-            />
+            >
+              <Popup closeButton={false} autoPan={true} className="offer-popup">
+                <div
+                  style={{
+                    width: 220,
+                    borderRadius: 14,
+                    overflow: "hidden",
+                    background: "#ffffff",
+                    boxShadow: "0 20px 45px rgba(15,23,42,0.2)",
+                  }}
+                >
+                  {car.imageUrl ? (
+                    <img
+                      src={car.imageUrl}
+                      alt={car.title}
+                      style={{
+                        width: "100%",
+                        height: 116,
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: "100%",
+                        height: 116,
+                        background: "#f3f4f6",
+                      }}
+                    />
+                  )}
+                  <div style={{ padding: "10px 12px 12px 12px" }}>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "#111827",
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {car.title}
+                    </p>
+                    <p
+                      style={{
+                        margin: "4px 0 0 0",
+                        fontSize: 12,
+                        color: "#6b7280",
+                      }}
+                    >
+                      {car.locationCity}, {car.locationCountry}
+                    </p>
+                    <p
+                      style={{
+                        margin: "6px 0 10px 0",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "#111827",
+                      }}
+                    >
+                      ${car.pricePerDay} / day
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onOfferPress?.(car.id)}
+                      style={{
+                        width: "100%",
+                        border: 0,
+                        borderRadius: 10,
+                        padding: "9px 10px",
+                        background: "#111827",
+                        color: "#ffffff",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      View offer
+                    </button>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
           ))}
         </MapContainer>
       </View>

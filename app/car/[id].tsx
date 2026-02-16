@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -11,12 +11,14 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as ExpoLinking from "expo-linking";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { BottomNav } from "@/components/navigation/BottomNav";
 
 export default function CarDetailScreen() {
@@ -24,19 +26,28 @@ export default function CarDetailScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { isSignedIn } = useAuth();
-  const cars = useQuery(api.cars.listCurrentlyAvailableCars);
-
-  const car = useMemo(
-    () => cars?.find((item) => item._id === id),
-    [cars, id],
-  );
+  const carId = typeof id === "string" ? (id as Id<"cars">) : undefined;
+  const offer = useQuery(api.cars.getCarOfferById, carId ? { carId } : "skip");
+  const createCheckoutSession = useAction(api.stripe.createCheckoutSession);
+  const car = offer?.car;
+  const host = offer?.host;
+  const hostUser = offer?.hostUser;
 
   const [selectedDays, setSelectedDays] = useState(3);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
   const galleryRef = useRef<FlatList<string>>(null);
   const isWeb = Platform.OS === "web";
 
-  if (!cars) {
+  if (!carId) {
+    return (
+      <SafeAreaView className="flex-1 bg-background items-center justify-center px-6">
+        <Text className="text-lg text-muted-foreground text-center">Car not found</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (offer === undefined) {
     return (
       <SafeAreaView className="flex-1 bg-background items-center justify-center">
         <Text className="text-base text-muted-foreground">Loading car details...</Text>
@@ -61,29 +72,64 @@ export default function CarDetailScreen() {
     .filter((item) => item.index !== activeImageIndex)
     .slice(0, 4);
   const extraPhotosCount = Math.max(0, galleryImages.length - (sideImages.length + 1));
+  const displayFeatures =
+    [...(car.features ?? []), ...(car.customFeatures ?? [])].filter(Boolean);
+  const hostInitial = (hostUser?.name?.trim()?.charAt(0) || "H").toUpperCase();
+  const hostMemberSince = host
+    ? new Date(host.createdAt).toLocaleDateString(undefined, {
+        month: "short",
+        year: "numeric",
+      })
+    : null;
 
-  const handleBook = () => {
+  const handleBook = async () => {
     if (!isSignedIn) {
       router.push("/sign-in");
       return;
     }
 
-    Alert.alert(
-      "Booking Confirmed",
-      `Your ${car.make} ${car.model} is booked for ${selectedDays} days. Total: $${grandTotal}`,
-      [{ text: "OK", onPress: () => router.back() }],
-    );
+    setIsCreatingCheckout(true);
+    try {
+      const webOrigin = isWeb && typeof window !== "undefined" ? window.location.origin : null;
+      const successUrl = webOrigin
+        ? `${webOrigin}/trips?checkout=success`
+        : ExpoLinking.createURL("/trips?checkout=success");
+      const cancelUrl = webOrigin
+        ? `${webOrigin}/car/${car._id}?checkout=cancelled`
+        : ExpoLinking.createURL(`/car/${car._id}?checkout=cancelled`);
+
+      const checkout = await createCheckoutSession({
+        carId: car._id,
+        carName: `${car.make} ${car.model}`,
+        pricePerDay: car.pricePerDay,
+        days: selectedDays,
+        successUrl,
+        cancelUrl,
+      });
+
+      if (isWeb && typeof window !== "undefined") {
+        window.location.href = checkout.url;
+        return;
+      }
+
+      await ExpoLinking.openURL(checkout.url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to open checkout.";
+      Alert.alert("Checkout Error", message);
+    } finally {
+      setIsCreatingCheckout(false);
+    }
   };
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
-        <View className="relative">
+        <View className="relative mt-4">
           {isWeb ? (
-            <View className="px-4 pt-4">
+            <View className="px-4 pt-8">
               <View className="max-w-[1100px] w-full self-center rounded-2xl overflow-hidden">
-                <View style={{ flexDirection: "row", height: 380, gap: 8 }}>
+                <View style={{ flexDirection: "row", height: 450, gap: 8 }}>
                   <Pressable
                     style={{ flex: 2, backgroundColor: "#e5e7eb" }}
                     onPress={() => setActiveImageIndex(activeImageIndex)}
@@ -151,7 +197,7 @@ export default function CarDetailScreen() {
               renderItem={({ item }) => (
                 <Image
                   source={{ uri: item }}
-                  style={{ width, height: 288 }}
+                  style={{ width, height: 340 }}
                   resizeMode="cover"
                 />
               )}
@@ -195,7 +241,7 @@ export default function CarDetailScreen() {
                   activeImageIndex === index ? "border-primary" : "border-border"
                 }`}
               >
-                <Image source={{ uri: image }} className="w-20 h-20" resizeMode="cover" />
+                <Image source={{ uri: image }} className="w-24 h-24" resizeMode="cover" />
               </Pressable>
             ))}
           </ScrollView>
@@ -204,9 +250,16 @@ export default function CarDetailScreen() {
         <View className="px-4 py-6">
           <View className="flex-row justify-between items-start mb-4">
             <View className="flex-1 pr-3">
-              <Text className="text-2xl font-bold text-foreground">
-                {car.title || `${car.make} ${car.model}`}
-              </Text>
+              <View className="flex-row items-center flex-wrap">
+                <Text className="text-2xl font-bold text-foreground">
+                  {car.title || `${car.make} ${car.model}`}
+                </Text>
+                {car.isCarVerified ? (
+                  <View className="ml-2 mt-1 px-2 py-1 bg-green-100 rounded-full">
+                    <Text className="text-[10px] font-semibold text-green-700">CAR VERIFIED</Text>
+                  </View>
+                ) : null}
+              </View>
               <Text className="text-base text-muted-foreground">
                 {car.make} {car.model} - {car.year}
               </Text>
@@ -227,26 +280,62 @@ export default function CarDetailScreen() {
 
           <Text className="text-lg font-semibold text-foreground mb-3">Features</Text>
           <View className="flex-row flex-wrap gap-2 mb-6">
-            <View className="bg-secondary px-3 py-2 rounded-full">
-              <Text className="text-sm text-foreground">Automatic</Text>
-            </View>
-            <View className="bg-secondary px-3 py-2 rounded-full">
-              <Text className="text-sm text-foreground">Air Conditioning</Text>
-            </View>
-            <View className="bg-secondary px-3 py-2 rounded-full">
-              <Text className="text-sm text-foreground">Bluetooth</Text>
-            </View>
-            <View className="bg-secondary px-3 py-2 rounded-full">
-              <Text className="text-sm text-foreground">GPS</Text>
-            </View>
+            {(displayFeatures.length ? displayFeatures : ["Automatic", "Air Conditioning", "Bluetooth"]).map(
+              (feature) => (
+                <View key={feature} className="bg-secondary px-3 py-2 rounded-full">
+                  <Text className="text-sm text-foreground">{feature}</Text>
+                </View>
+              ),
+            )}
           </View>
 
           <Text className="text-lg font-semibold text-foreground mb-3">Pickup</Text>
           <View className="bg-card p-4 rounded-xl border border-border mb-6">
+            {car.formattedAddress ? (
+              <>
+                <Text className="text-sm text-muted-foreground mb-1">Address</Text>
+                <Text className="text-base font-medium text-foreground">{car.formattedAddress}</Text>
+              </>
+            ) : null}
             <Text className="text-sm text-muted-foreground mb-1">City</Text>
             <Text className="text-base font-medium text-foreground">{car.location.city}</Text>
             <Text className="text-sm text-muted-foreground mt-3 mb-1">Country</Text>
             <Text className="text-base font-medium text-foreground">{car.location.country}</Text>
+          </View>
+
+          <Text className="text-lg font-semibold text-foreground mb-3">Host</Text>
+          <View className="bg-card p-4 rounded-xl border border-border mb-6">
+            <View className="flex-row items-center">
+              {hostUser?.imageUrl ? (
+                <Image
+                  source={{ uri: hostUser.imageUrl }}
+                  className="w-12 h-12 rounded-full"
+                  resizeMode="cover"
+                />
+              ) : (
+                <View className="w-12 h-12 rounded-full bg-secondary items-center justify-center">
+                  <Text className="text-base font-semibold text-foreground">{hostInitial}</Text>
+                </View>
+              )}
+              <View className="ml-3 flex-1">
+                <View className="flex-row items-center">
+                  <Text className="text-base font-semibold text-foreground">
+                    Hosted by {hostUser?.name ?? "Host"}
+                  </Text>
+                  {host?.isVerified ? (
+                    <View className="ml-2 px-2 py-1 bg-green-100 rounded-full">
+                      <Text className="text-[10px] font-semibold text-green-700">VERIFIED</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text className="text-xs text-muted-foreground mt-1">
+                  {hostMemberSince ? `Member since ${hostMemberSince}` : "Host account"}
+                </Text>
+              </View>
+            </View>
+            <Text className="text-sm text-muted-foreground mt-3">
+              {host?.bio || "Friendly host ready to help you enjoy a smooth trip."}
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -277,8 +366,14 @@ export default function CarDetailScreen() {
           </View>
         </View>
 
-        <Pressable onPress={handleBook} className="bg-primary py-4 rounded-xl items-center">
-          <Text className="text-primary-foreground font-semibold text-base">Book Now</Text>
+        <Pressable
+          onPress={handleBook}
+          disabled={isCreatingCheckout}
+          className={`py-4 rounded-xl items-center ${isCreatingCheckout ? "bg-primary/60" : "bg-primary"}`}
+        >
+          <Text className="text-primary-foreground font-semibold text-base">
+            {isCreatingCheckout ? "Redirecting..." : "Book Now"}
+          </Text>
         </Pressable>
       </View>
       <BottomNav />

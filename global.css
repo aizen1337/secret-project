@@ -56,3 +56,22 @@
     --chart-5: 340 75% 55%;
   }
 }
+
+.offer-popup .leaflet-popup-content-wrapper {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.offer-popup .leaflet-popup-content {
+  margin: 0;
+}
+
+.offer-popup .leaflet-popup-tip-container {
+  margin-top: -1px;
+}
+
+.offer-popup .leaflet-popup-tip {
+  background: #ffffff;
+  box-shadow: none;
+}
