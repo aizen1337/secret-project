@@ -1,5 +1,6 @@
 
 import { useMemo, useState } from "react";
+import { useColorScheme } from "nativewind";
 import { View, Text, ScrollView, Pressable, Image } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,12 +8,15 @@ import { useAuth } from "@clerk/clerk-expo";
 import { api } from "@/convex/_generated/api";
 import { useQuery } from "convex/react";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const mode = resolveThemeMode(useColorScheme());
   const { isLoaded, isSignedIn } = useAuth();
   const [activeTab, setActiveTab] = useState<"listings" | "bookings">("listings");
   const myCars = useQuery(api.cars.listHostCars, isSignedIn ? {} : "skip");
+  const hostPayouts = useQuery(api.bookings.listHostBookingsWithPayouts, isSignedIn ? {} : "skip");
   const isLoading = isSignedIn && myCars === undefined;
 
   const listingStats = useMemo(() => {
@@ -44,7 +48,7 @@ export default function DashboardScreen() {
       <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
         <View className="flex-1 items-center justify-center px-6">
           <View className="w-20 h-20 bg-secondary rounded-full items-center justify-center mb-4">
-            <Ionicons name="grid-outline" size={40} color="#737373" />
+            <Ionicons name="grid-outline" size={40} color={getTokenColor(mode, "iconMuted")} />
           </View>
           <Text className="text-xl font-semibold text-foreground mb-2 text-center">
             Host Dashboard
@@ -82,11 +86,11 @@ export default function DashboardScreen() {
                 onPress={() => router.push("/car/new")}
                 className="w-10 h-10 rounded-full bg-card border border-border items-center justify-center"
               >
-                <Ionicons name="add" size={20} color="#171717" />
+                <Ionicons name="add" size={20} color={getTokenColor(mode, "icon")} />
               </Pressable>
               <Link href="/profile" asChild>
                 <Pressable className="w-10 h-10 rounded-full bg-card border border-border items-center justify-center">
-                  <Ionicons name="settings-outline" size={20} color="#171717" />
+                  <Ionicons name="settings-outline" size={20} color={getTokenColor(mode, "icon")} />
                 </Pressable>
               </Link>
             </View>
@@ -202,11 +206,30 @@ export default function DashboardScreen() {
             </View>
           ) : (
             <View>
-              <View className="bg-card rounded-xl p-4 border border-border">
-                <Text className="text-sm text-muted-foreground text-center">
-                  Bookings will appear here once you start hosting trips.
-                </Text>
-              </View>
+              {hostPayouts && hostPayouts.length > 0 ? (
+                hostPayouts.map((entry) => (
+                  <View key={entry.payment._id} className="bg-card rounded-xl p-4 border border-border mb-3">
+                    <Text className="text-sm font-semibold text-foreground">
+                      {entry.car?.title || `${entry.car?.make ?? "Car"} ${entry.car?.model ?? ""}`}
+                    </Text>
+                    <Text className="text-xs text-muted-foreground mt-1">
+                      Booking status: {entry.booking?.status ?? "unknown"}
+                    </Text>
+                    <Text className="text-xs text-muted-foreground">
+                      Payment: {entry.payment.status}
+                    </Text>
+                    <Text className="text-xs text-muted-foreground">
+                      Payout: {entry.payment.payoutStatus}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <View className="bg-card rounded-xl p-4 border border-border">
+                  <Text className="text-sm text-muted-foreground text-center">
+                    No payout records yet.
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -214,3 +237,4 @@ export default function DashboardScreen() {
     </SafeAreaView>
   );
 }
+

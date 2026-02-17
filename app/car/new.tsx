@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useColorScheme } from "nativewind";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +20,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { DateRangePicker } from "@/components/filters/DateRangePicker";
 import { FEATURE_GROUPS } from "@/features/cars/components/lib/features";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 type FieldErrors = Partial<Record<
   | "title"
@@ -68,6 +70,7 @@ function randomToken(prefix: string) {
 
 export default function NewCarScreen() {
   const router = useRouter();
+  const mode = resolveThemeMode(useColorScheme());
   const generateCarImageUploadUrl = useMutation(api.cars.generateCarImageUploadUrl);
   const createCar = useMutation(api.cars.createCar);
   const searchAddresses = useAction(api.cars.searchAddresses);
@@ -406,7 +409,7 @@ export default function NewCarScreen() {
             onPress={() => router.back()}
             className="w-10 h-10 rounded-full bg-card border border-border items-center justify-center"
           >
-            <Ionicons name="chevron-back" size={20} color="#171717" />
+            <Ionicons name="chevron-back" size={20} color={getTokenColor(mode, "icon")} />
           </Pressable>
           <Text className="text-lg font-semibold text-foreground">Add New Car</Text>
           <View className="w-10 h-10" />
@@ -420,7 +423,7 @@ export default function NewCarScreen() {
             placeholder="Listing title"
             className="rounded-lg border border-border px-3 py-3 text-foreground mb-2"
           />
-          {fieldErrors.title ? <Text className="text-xs text-red-500 mb-2">{fieldErrors.title}</Text> : null}
+          {fieldErrors.title ? <Text className="text-xs text-destructive mb-2">{fieldErrors.title}</Text> : null}
 
           <TextInput
             value={make}
@@ -428,7 +431,7 @@ export default function NewCarScreen() {
             placeholder="Make"
             className="rounded-lg border border-border px-3 py-3 text-foreground mb-2"
           />
-          {fieldErrors.make ? <Text className="text-xs text-red-500 mb-2">{fieldErrors.make}</Text> : null}
+          {fieldErrors.make ? <Text className="text-xs text-destructive mb-2">{fieldErrors.make}</Text> : null}
 
           <TextInput
             value={model}
@@ -436,7 +439,7 @@ export default function NewCarScreen() {
             placeholder="Model"
             className="rounded-lg border border-border px-3 py-3 text-foreground mb-2"
           />
-          {fieldErrors.model ? <Text className="text-xs text-red-500 mb-2">{fieldErrors.model}</Text> : null}
+          {fieldErrors.model ? <Text className="text-xs text-destructive mb-2">{fieldErrors.model}</Text> : null}
 
           <View className="flex-row gap-2">
             <View className="flex-1">
@@ -447,7 +450,7 @@ export default function NewCarScreen() {
                 keyboardType="numeric"
                 className="rounded-lg border border-border px-3 py-3 text-foreground mb-2"
               />
-              {fieldErrors.year ? <Text className="text-xs text-red-500 mb-1">{fieldErrors.year}</Text> : null}
+              {fieldErrors.year ? <Text className="text-xs text-destructive mb-1">{fieldErrors.year}</Text> : null}
             </View>
             <View className="flex-1">
               <TextInput
@@ -457,20 +460,20 @@ export default function NewCarScreen() {
                 keyboardType="numeric"
                 className="rounded-lg border border-border px-3 py-3 text-foreground mb-2"
               />
-              {fieldErrors.pricePerDay ? <Text className="text-xs text-red-500 mb-1">{fieldErrors.pricePerDay}</Text> : null}
+              {fieldErrors.pricePerDay ? <Text className="text-xs text-destructive mb-1">{fieldErrors.pricePerDay}</Text> : null}
             </View>
           </View>
         </View>
 
         <View className="bg-card rounded-xl border border-border p-4 mb-3">
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-base font-semibold text-foreground">VIN + Registration Date</Text>
-            {isCarVerified ? (
-              <View className="px-2 py-1 bg-green-100 rounded-full">
-                <Text className="text-[10px] font-semibold text-green-700">CAR VERIFIED</Text>
-              </View>
-            ) : null}
-          </View>
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-base font-semibold text-foreground">VIN + Registration Date</Text>
+              {isCarVerified ? (
+                <View className="px-2 py-1 bg-verified-bg rounded-full">
+                  <Text className="text-[10px] font-semibold text-verified-fg">CAR VERIFIED</Text>
+                </View>
+              ) : null}
+            </View>
 
           <TextInput
             value={vin}
@@ -534,7 +537,7 @@ export default function NewCarScreen() {
             </View>
           ) : null}
 
-          {fieldErrors.address ? <Text className="text-xs text-red-500 mt-2">{fieldErrors.address}</Text> : null}
+          {fieldErrors.address ? <Text className="text-xs text-destructive mt-2">{fieldErrors.address}</Text> : null}
 
           <TextInput
             value={formattedAddress}
@@ -551,7 +554,7 @@ export default function NewCarScreen() {
                 placeholder="City"
                 className="rounded-lg border border-border px-3 py-3 text-foreground mb-2"
               />
-              {fieldErrors.city ? <Text className="text-xs text-red-500 mb-1">{fieldErrors.city}</Text> : null}
+              {fieldErrors.city ? <Text className="text-xs text-destructive mb-1">{fieldErrors.city}</Text> : null}
             </View>
             <View className="flex-1">
               <TextInput
@@ -560,7 +563,7 @@ export default function NewCarScreen() {
                 placeholder="Country"
                 className="rounded-lg border border-border px-3 py-3 text-foreground mb-2"
               />
-              {fieldErrors.country ? <Text className="text-xs text-red-500 mb-1">{fieldErrors.country}</Text> : null}
+              {fieldErrors.country ? <Text className="text-xs text-destructive mb-1">{fieldErrors.country}</Text> : null}
             </View>
           </View>
 
@@ -573,7 +576,7 @@ export default function NewCarScreen() {
                 keyboardType="numeric"
                 className="rounded-lg border border-border px-3 py-3 text-foreground mb-2"
               />
-              {fieldErrors.latitude ? <Text className="text-xs text-red-500 mb-1">{fieldErrors.latitude}</Text> : null}
+              {fieldErrors.latitude ? <Text className="text-xs text-destructive mb-1">{fieldErrors.latitude}</Text> : null}
             </View>
             <View className="flex-1">
               <TextInput
@@ -583,7 +586,7 @@ export default function NewCarScreen() {
                 keyboardType="numeric"
                 className="rounded-lg border border-border px-3 py-3 text-foreground mb-2"
               />
-              {fieldErrors.longitude ? <Text className="text-xs text-red-500 mb-1">{fieldErrors.longitude}</Text> : null}
+              {fieldErrors.longitude ? <Text className="text-xs text-destructive mb-1">{fieldErrors.longitude}</Text> : null}
             </View>
           </View>
         </View>
@@ -600,7 +603,7 @@ export default function NewCarScreen() {
             }}
           />
           {fieldErrors.availability ? (
-            <Text className="text-xs text-red-500 mt-2">{fieldErrors.availability}</Text>
+            <Text className="text-xs text-destructive mt-2">{fieldErrors.availability}</Text>
           ) : null}
         </View>
 
@@ -650,13 +653,13 @@ export default function NewCarScreen() {
                   className="px-3 py-2 rounded-full border border-border bg-card flex-row items-center"
                 >
                   <Text className="text-xs text-foreground mr-1">{feature}</Text>
-                  <Ionicons name="close" size={12} color="#737373" />
+                  <Ionicons name="close" size={12} color={getTokenColor(mode, "iconMuted")} />
                 </Pressable>
               ))}
             </View>
           ) : null}
 
-          {fieldErrors.features ? <Text className="text-xs text-red-500 mt-2">{fieldErrors.features}</Text> : null}
+          {fieldErrors.features ? <Text className="text-xs text-destructive mt-2">{fieldErrors.features}</Text> : null}
         </View>
 
         <View className="bg-card rounded-xl border border-border p-4 mt-5 mb-3">
@@ -675,7 +678,7 @@ export default function NewCarScreen() {
             </Text>
           </Pressable>
 
-          {fieldErrors.images ? <Text className="text-xs text-red-500 mt-2">{fieldErrors.images}</Text> : null}
+          {fieldErrors.images ? <Text className="text-xs text-destructive mt-2">{fieldErrors.images}</Text> : null}
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4">
             <View className="flex-row gap-3">
@@ -684,9 +687,10 @@ export default function NewCarScreen() {
                   <Image source={{ uri: asset.uri }} className="w-36 h-28 rounded-xl" resizeMode="cover" />
                   <Pressable
                     onPress={() => removeImage(asset.uri)}
-                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-black/70 items-center justify-center"
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full items-center justify-center"
+                    style={{ backgroundColor: getTokenColor(mode, "overlay") }}
                   >
-                    <Ionicons name="close" size={14} color="#fff" />
+                    <Ionicons name="close" size={14} color={getTokenColor(mode, "primaryForeground")} />
                   </Pressable>
                 </View>
               ))}
@@ -701,7 +705,7 @@ export default function NewCarScreen() {
         >
           {isBusy ? (
             <View className="flex-row items-center">
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={getTokenColor(mode, "primaryForeground")} />
               <Text className="text-primary-foreground font-semibold text-base ml-2">
                 {isVerifyingCar
                   ? "Verifying car..."
@@ -718,3 +722,5 @@ export default function NewCarScreen() {
     </SafeAreaView>
   );
 }
+
+

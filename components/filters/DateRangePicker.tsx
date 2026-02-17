@@ -1,14 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useColorScheme } from "nativewind";
 import { useMemo, useState } from "react";
 import {
   Modal,
   Platform,
   Pressable,
-  useColorScheme,
   View,
 } from "react-native";
 
 import { Text } from "@/components/ui/text";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 type DateRangePickerProps = {
   startDate: string;
@@ -74,7 +75,7 @@ export function DateRangePicker({
   endDate,
   onApply,
 }: DateRangePickerProps) {
-  const colorScheme = useColorScheme();
+  const mode = resolveThemeMode(useColorScheme());
   const [isOpen, setIsOpen] = useState(false);
   const [draftStart, setDraftStart] = useState(startDate);
   const [draftEnd, setDraftEnd] = useState(endDate);
@@ -85,6 +86,12 @@ export function DateRangePicker({
   const days = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const draftStartDate = parseYmd(draftStart);
   const draftEndDate = parseYmd(draftEnd);
+  const rangeFillColor = getTokenColor(
+    mode,
+    mode === "dark" ? "calendarRangeDark" : "calendarRange",
+  );
+  const edgeFillColor = getTokenColor(mode, "primary");
+  const strongIconColor = getTokenColor(mode, "foreground");
 
   const open = () => {
     setDraftStart(startDate);
@@ -145,16 +152,17 @@ export function DateRangePicker({
           <Ionicons
             name="calendar-outline"
             size={18}
-            color={colorScheme === "dark" ? "#9ca3af" : "#737373"}
+            color={strongIconColor}
           />
         </View>
       </Pressable>
 
       <Modal visible={isOpen} transparent animationType="fade" onRequestClose={close}>
         <View
-          className={`flex-1 bg-black/45 ${
+          className={`flex-1 ${
             Platform.OS === "web" ? "items-center justify-center px-4" : "justify-end"
           }`}
+          style={{ backgroundColor: getTokenColor(mode, "overlay") }}
         >
           <Pressable className="absolute inset-0" onPress={close} />
           <View
@@ -171,7 +179,7 @@ export function DateRangePicker({
                 <Ionicons
                   name="close"
                   size={20}
-                  color={colorScheme === "dark" ? "#d4d4d8" : "#27272a"}
+                  color={strongIconColor}
                 />
               </Pressable>
             </View>
@@ -196,7 +204,7 @@ export function DateRangePicker({
                 <Ionicons
                   name="chevron-back"
                   size={18}
-                  color={colorScheme === "dark" ? "#d4d4d8" : "#27272a"}
+                  color={strongIconColor}
                 />
               </Pressable>
               <Text className="text-base font-medium text-foreground">
@@ -213,7 +221,7 @@ export function DateRangePicker({
                 <Ionicons
                   name="chevron-forward"
                   size={18}
-                  color={colorScheme === "dark" ? "#d4d4d8" : "#27272a"}
+                  color={strongIconColor}
                 />
               </Pressable>
             </View>
@@ -234,27 +242,65 @@ export function DateRangePicker({
                       day.getMonth() === visibleMonth.getMonth() &&
                       day.getFullYear() === visibleMonth.getFullYear();
                     const isDisabled = startOfDay(day).getTime() < today.getTime();
+                    const dayTime = day.getTime();
                     const inRange =
-                      day.getTime() >= draftStartDate.getTime() &&
-                      day.getTime() <= draftEndDate.getTime();
+                      dayTime >= draftStartDate.getTime() &&
+                      dayTime <= draftEndDate.getTime();
                     const isStart = isSameDay(day, draftStartDate);
                     const isEnd = isSameDay(day, draftEndDate);
                     const isEdge = isStart || isEnd;
+                    const isSingleDay = isStart && isEnd;
+                    const showLeftRange = inRange && !isStart;
+                    const showRightRange = inRange && !isEnd;
 
                     return (
-                      <View key={formatYmd(day)} style={{ flex: 1, paddingHorizontal: 2 }}>
+                      <View
+                        key={formatYmd(day)}
+                        style={{
+                          flex: 1,
+                          height: 40,
+                          justifyContent: "center",
+                        }}
+                      >
+                        {inRange && !isSingleDay ? (
+                          <>
+                            {showLeftRange ? (
+                              <View
+                                style={{
+                                  position: "absolute",
+                                  left: 0,
+                                  width: "50%",
+                                  height: 32,
+                                  backgroundColor: rangeFillColor,
+                                  borderTopLeftRadius: isEdge ? 0 : 0,
+                                  borderBottomLeftRadius: isEdge ? 16 : 0,
+                                }}
+                              />
+                            ) : null}
+                            {showRightRange ? (
+                              <View
+                                style={{
+                                  position: "absolute",
+                                  right: 0,
+                                  width: "50%",
+                                  height: 32,
+                                  backgroundColor: rangeFillColor,
+                                  borderTopRightRadius: isEdge ? 16 : 0,
+                                  borderBottomRightRadius: isEdge ? 16 : 0,
+                                }}
+                              />
+                            ) : null}
+                          </>
+                        ) : null}
                         <Pressable
                           onPress={() => selectDate(day)}
                           disabled={isDisabled}
-                          className="items-center py-2 rounded-lg"
+                          className="mx-auto items-center justify-center"
                           style={{
-                            backgroundColor: isEdge
-                              ? "#0f172a"
-                              : inRange
-                                ? colorScheme === "dark"
-                                  ? "rgba(30,41,59,0.6)"
-                                  : "#e2e8f0"
-                                : "transparent",
+                            backgroundColor: isEdge ? edgeFillColor : "transparent",
+                            width: 32,
+                            height: 32,
+                            borderRadius: 999,
                           }}
                         >
                           <Text
@@ -262,7 +308,7 @@ export function DateRangePicker({
                               isDisabled
                                 ? "text-muted-foreground/40"
                                 : isEdge
-                                  ? "text-white font-semibold"
+                                  ? "text-primary-foreground font-semibold"
                                   : isCurrentMonth
                                     ? "text-foreground"
                                     : "text-muted-foreground"
@@ -299,3 +345,4 @@ export function DateRangePicker({
     </>
   );
 }
+

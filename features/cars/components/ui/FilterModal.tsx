@@ -1,6 +1,8 @@
 import { View, Text, Modal, Pressable, ScrollView } from "react-native";
+import { useColorScheme } from "nativewind";
 import { Ionicons } from "@expo/vector-icons";
 import { carTypes, locations } from "../lib/data";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 interface FilterModalProps {
   visible: boolean;
@@ -25,6 +27,9 @@ export function FilterModal({
   filters,
   onFiltersChange,
 }: FilterModalProps) {
+  const mode = resolveThemeMode(useColorScheme());
+  const strongIconColor = getTokenColor(mode, "foreground");
+
   return (
     <Modal
       visible={visible}
@@ -36,7 +41,7 @@ export function FilterModal({
         <View className="flex-row items-center justify-between p-4 border-b border-border">
           <Text className="text-xl font-semibold text-foreground">Filters</Text>
           <Pressable onPress={onClose}>
-            <Ionicons name="close" size={24} color="#171717" />
+            <Ionicons name="close" size={24} color={strongIconColor} />
           </Pressable>
         </View>
 
@@ -171,3 +176,4 @@ export function FilterModal({
     </Modal>
   );
 }
+

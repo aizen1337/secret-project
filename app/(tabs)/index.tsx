@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useColorScheme } from "nativewind";
 import {
   ActivityIndicator,
   FlatList,
   Pressable,
   SafeAreaView,
   TextInput,
-  useColorScheme,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -19,6 +19,7 @@ import { Text } from "@/components/ui/text";
 import { CarCard } from "@/features/cars/components/ui/CarCard";
 import { SearchMap } from "@/features/map/SearchMap";
 import type { CarLocation } from "@/features/map/SearchMap";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 type CarItem = {
   id: string;
@@ -64,7 +65,8 @@ export default function BrowseCars() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
-  const colorScheme = useColorScheme();
+  const mode = resolveThemeMode(useColorScheme());
+  const strongIconColor = getTokenColor(mode, "foreground");
   const listRef = useRef<FlatList<CarItem>>(null);
 
   const today = useMemo(() => new Date(), []);
@@ -253,11 +255,11 @@ export default function BrowseCars() {
         </View>
         <View className="flex-row items-center gap-2">
           <Pressable className="h-10 w-10 items-center justify-center rounded-full border border-border bg-card">
-            <Ionicons name="options-outline" size={20} color="#171717" />
+            <Ionicons name="options-outline" size={20} color={strongIconColor} />
           </Pressable>
           <Link href="/profile" asChild>
             <Pressable className="h-10 w-10 items-center justify-center rounded-full border border-border bg-card">
-              <Ionicons name="person-outline" size={20} color="#171717" />
+              <Ionicons name="person-outline" size={20} color={strongIconColor} />
             </Pressable>
           </Link>
         </View>
@@ -266,26 +268,22 @@ export default function BrowseCars() {
       <TextInput
         value={searchQuery}
         onChangeText={setSearchQuery}
-        className={`mb-3 rounded-xl px-4 py-3 text-sm ${
-          colorScheme === "dark" ? "bg-card" : "bg-gray-100"
-        }`}
+        className="mb-3 rounded-xl bg-secondary px-4 py-3 text-sm text-foreground"
         placeholder="Search cars by make or model..."
+        placeholderTextColor={getTokenColor(mode, "placeholder")}
       />
 
-      <View
-        className={`flex-row items-center rounded-xl px-3 ${
-          colorScheme === "dark" ? "bg-card" : "bg-gray-100"
-        }`}
-      >
+      <View className="flex-row items-center rounded-xl bg-secondary px-3">
         <Ionicons
           name="search"
           size={18}
-          color={colorScheme === "dark" ? "#9ca3af" : "#737373"}
+          color={strongIconColor}
         />
         <TextInput
           value={locationQuery}
           onChangeText={setLocationQuery}
           placeholder="Search location on map..."
+          placeholderTextColor={getTokenColor(mode, "placeholder")}
           className="ml-2 flex-1 py-3 text-sm text-foreground"
           onSubmitEditing={searchLocation}
           returnKeyType="search"
@@ -296,7 +294,7 @@ export default function BrowseCars() {
           disabled={isSearchingLocation}
         >
           {isSearchingLocation ? (
-            <ActivityIndicator color="#ffffff" size="small" />
+            <ActivityIndicator color={getTokenColor(mode, "primaryForeground")} size="small" />
           ) : (
             <Text className="text-xs font-semibold text-primary-foreground">Go</Text>
           )}
@@ -304,7 +302,7 @@ export default function BrowseCars() {
       </View>
 
       {searchError ? (
-        <Text className="mt-2 text-xs text-red-500">{searchError}</Text>
+        <Text className="mt-2 text-xs text-destructive">{searchError}</Text>
       ) : null}
 
       <View className="mt-3">
@@ -406,3 +404,4 @@ export default function BrowseCars() {
     </SafeAreaView>
   );
 }
+

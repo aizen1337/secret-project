@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useColorScheme } from "nativewind";
 import {
   Alert,
   FlatList,
@@ -20,11 +21,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { BottomNav } from "@/components/navigation/BottomNav";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 export default function CarDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const mode = resolveThemeMode(useColorScheme());
   const { isSignedIn } = useAuth();
   const carId = typeof id === "string" ? (id as Id<"cars">) : undefined;
   const offer = useQuery(api.cars.getCarOfferById, carId ? { carId } : "skip");
@@ -105,6 +108,8 @@ export default function CarDetailScreen() {
         days: selectedDays,
         successUrl,
         cancelUrl,
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + (selectedDays - 1) * 24 * 60 * 60 * 1000).toISOString(),
       });
 
       if (isWeb && typeof window !== "undefined") {
@@ -131,7 +136,7 @@ export default function CarDetailScreen() {
               <View className="max-w-[1100px] w-full self-center rounded-2xl overflow-hidden">
                 <View style={{ flexDirection: "row", height: 450, gap: 8 }}>
                   <Pressable
-                    style={{ flex: 2, backgroundColor: "#e5e7eb" }}
+                    style={{ flex: 2, backgroundColor: getTokenColor(mode, "surfaceSubtle") }}
                     onPress={() => setActiveImageIndex(activeImageIndex)}
                   >
                     <Image
@@ -146,13 +151,15 @@ export default function CarDetailScreen() {
                         {sideImages.slice(0, 2).map((item) => (
                           <Pressable
                             key={`${item.image}-${item.index}`}
-                            style={{ flex: 1, backgroundColor: "#e5e7eb" }}
+                            style={{ flex: 1, backgroundColor: getTokenColor(mode, "surfaceSubtle") }}
                             onPress={() => setActiveImageIndex(item.index)}
                           >
                             <Image source={{ uri: item.image }} className="w-full h-full" resizeMode="cover" />
                           </Pressable>
                         ))}
-                        {sideImages.length < 2 ? <View style={{ flex: 1, backgroundColor: "#f3f4f6" }} /> : null}
+                        {sideImages.length < 2 ? (
+                          <View style={{ flex: 1, backgroundColor: getTokenColor(mode, "surfaceSubtle") }} />
+                        ) : null}
                       </View>
                       <View style={{ flex: 1, flexDirection: "row", gap: 8 }}>
                         {sideImages.slice(2, 4).map((item, idx) => {
@@ -161,13 +168,16 @@ export default function CarDetailScreen() {
                           return (
                             <Pressable
                               key={`${item.image}-${item.index}`}
-                              style={{ flex: 1, backgroundColor: "#e5e7eb" }}
+                              style={{ flex: 1, backgroundColor: getTokenColor(mode, "surfaceSubtle") }}
                               onPress={() => setActiveImageIndex(item.index)}
                             >
                               <Image source={{ uri: item.image }} className="w-full h-full" resizeMode="cover" />
                               {showMorePhotos ? (
-                                <View className="absolute inset-0 bg-black/45 items-center justify-center">
-                                  <Text className="text-white font-semibold text-sm">
+                                <View
+                                  className="absolute inset-0 items-center justify-center"
+                                  style={{ backgroundColor: getTokenColor(mode, "overlay") }}
+                                >
+                                  <Text className="text-primary-foreground font-semibold text-sm">
                                     +{extraPhotosCount} photos
                                   </Text>
                                 </View>
@@ -175,7 +185,9 @@ export default function CarDetailScreen() {
                             </Pressable>
                           );
                         })}
-                        {sideImages.length < 4 ? <View style={{ flex: 1, backgroundColor: "#f3f4f6" }} /> : null}
+                        {sideImages.length < 4 ? (
+                          <View style={{ flex: 1, backgroundColor: getTokenColor(mode, "surfaceSubtle") }} />
+                        ) : null}
                       </View>
                     </View>
                   ) : null}
@@ -205,18 +217,23 @@ export default function CarDetailScreen() {
           )}
           <Pressable
             onPress={() => router.back()}
-            className="absolute top-4 left-4 w-10 h-10 rounded-full bg-black/40 items-center justify-center"
+            className="absolute top-4 left-4 w-10 h-10 rounded-full items-center justify-center"
+            style={{ backgroundColor: getTokenColor(mode, "overlay") }}
           >
-            <Ionicons name="chevron-back" size={20} color="#ffffff" />
+            <Ionicons name="chevron-back" size={20} color={getTokenColor(mode, "primaryForeground")} />
           </Pressable>
           {!isWeb && car.images.length > 1 ? (
             <View className="absolute bottom-4 left-0 right-0 flex-row justify-center gap-2">
               {car.images.map((_, index) => (
                 <View
                   key={`dot-${index}`}
-                  className={`h-2 rounded-full ${
-                    index === activeImageIndex ? "w-5 bg-white" : "w-2 bg-white/60"
-                  }`}
+                  className={`h-2 rounded-full ${index === activeImageIndex ? "w-5" : "w-2"}`}
+                  style={{
+                    backgroundColor:
+                      index === activeImageIndex
+                        ? getTokenColor(mode, "primaryForeground")
+                        : getTokenColor(mode, "iconMuted"),
+                  }}
                 />
               ))}
             </View>
@@ -255,8 +272,8 @@ export default function CarDetailScreen() {
                   {car.title || `${car.make} ${car.model}`}
                 </Text>
                 {car.isCarVerified ? (
-                  <View className="ml-2 mt-1 px-2 py-1 bg-green-100 rounded-full">
-                    <Text className="text-[10px] font-semibold text-green-700">CAR VERIFIED</Text>
+                  <View className="ml-2 mt-1 px-2 py-1 bg-verified-bg rounded-full">
+                    <Text className="text-[10px] font-semibold text-verified-fg">CAR VERIFIED</Text>
                   </View>
                 ) : null}
               </View>
@@ -265,14 +282,14 @@ export default function CarDetailScreen() {
               </Text>
             </View>
             <View className="flex-row items-center">
-              <Ionicons name="star" size={16} color="#f59e0b" />
+              <Ionicons name="star" size={16} color={getTokenColor(mode, "ratingStar")} />
               <Text className="text-base font-semibold text-foreground ml-1">5.0</Text>
               <Text className="text-sm text-muted-foreground ml-1">(New)</Text>
             </View>
           </View>
 
           <View className="flex-row items-center mb-6">
-            <Ionicons name="location-outline" size={18} color="#6b7280" />
+            <Ionicons name="location-outline" size={18} color={getTokenColor(mode, "iconMuted")} />
             <Text className="text-base text-muted-foreground ml-1">
               {car.location.city}, {car.location.country}
             </Text>
@@ -323,8 +340,8 @@ export default function CarDetailScreen() {
                     Hosted by {hostUser?.name ?? "Host"}
                   </Text>
                   {host?.isVerified ? (
-                    <View className="ml-2 px-2 py-1 bg-green-100 rounded-full">
-                      <Text className="text-[10px] font-semibold text-green-700">VERIFIED</Text>
+                    <View className="ml-2 px-2 py-1 bg-verified-bg rounded-full">
+                      <Text className="text-[10px] font-semibold text-verified-fg">VERIFIED</Text>
                     </View>
                   ) : null}
                 </View>
@@ -357,11 +374,11 @@ export default function CarDetailScreen() {
               onPress={() => setSelectedDays(Math.max(1, selectedDays - 1))}
               className="px-4 py-3"
             >
-              <Ionicons name="remove" size={20} color="#9ca3af" />
+              <Ionicons name="remove" size={20} color={getTokenColor(mode, "iconMuted")} />
             </Pressable>
             <Text className="text-base font-semibold text-foreground px-2">{selectedDays} days</Text>
             <Pressable onPress={() => setSelectedDays(selectedDays + 1)} className="px-4 py-3">
-              <Ionicons name="add" size={20} color="#9ca3af" />
+              <Ionicons name="add" size={20} color={getTokenColor(mode, "iconMuted")} />
             </Pressable>
           </View>
         </View>
@@ -380,3 +397,4 @@ export default function CarDetailScreen() {
     </SafeAreaView>
   );
 }
+

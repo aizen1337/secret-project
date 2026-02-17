@@ -1,17 +1,34 @@
 'use client';
 
 import { View, Text, SafeAreaView, Pressable, Image } from "react-native";
+import { useColorScheme } from "nativewind";
 import { Link, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth, useUser } from "@clerk/clerk-expo";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
+import { useState } from "react";
+import * as ExpoLinking from "expo-linking";
 import { api } from "@/convex/_generated/api";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
+import {
+  getStoredThemePreference,
+  setStoredThemePreference,
+  type ThemePreference,
+} from "@/lib/themePreference";
 
 export default function ProfileScreen() {
+  const colorSchemeState = useColorScheme();
   const { isLoaded, isSignedIn, signOut } = useAuth();
   const { user } = useUser();
   const convexUser = useQuery(api.users.getCurrentUser);
+  const hostPayoutStatus = useQuery(api.users.getHostPayoutStatus);
+  const createHostOnboardingLink = useAction(api.stripeConnect.createHostOnboardingLink as never);
   const router = useRouter();
+  const mode = resolveThemeMode(colorSchemeState);
+  const [themePreference, setThemePreference] = useState<ThemePreference>(
+    getStoredThemePreference(),
+  );
+  const [isOpeningPayoutSetup, setIsOpeningPayoutSetup] = useState(false);
 
   if (!isLoaded) {
     return (
@@ -28,7 +45,7 @@ export default function ProfileScreen() {
       <SafeAreaView className="flex-1 bg-background">
         <View className="flex-1 items-center justify-center px-6">
           <View className="w-20 h-20 bg-secondary rounded-full items-center justify-center mb-4">
-            <Ionicons name="person-outline" size={40} color="#737373" />
+            <Ionicons name="person-outline" size={40} color={getTokenColor(mode, "iconMuted")} />
           </View>
           <Text className="text-xl font-semibold text-foreground mb-2 text-center">
             Log in to DriveShare
@@ -76,6 +93,26 @@ export default function ProfileScreen() {
     { icon: "help-circle-outline", label: "Help Center", href: "#" },
   ];
 
+  const payoutStatusLabel = !hostPayoutStatus?.hasConnectAccount
+    ? "Onboarding required"
+    : hostPayoutStatus.payoutsEnabled
+      ? "Ready"
+      : "Pending verification";
+
+  const handleOpenPayoutSetup = async () => {
+    setIsOpeningPayoutSetup(true);
+    try {
+      const result = await createHostOnboardingLink({});
+      if (typeof window !== "undefined") {
+        window.location.href = result.url;
+      } else {
+        await ExpoLinking.openURL(result.url);
+      }
+    } finally {
+      setIsOpeningPayoutSetup(false);
+    }
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="flex-1 px-4 pt-4">
@@ -88,7 +125,7 @@ export default function ProfileScreen() {
             />
           ) : (
             <View className="w-16 h-16 rounded-full bg-secondary items-center justify-center">
-              <Ionicons name="person-outline" size={28} color="#737373" />
+              <Ionicons name="person-outline" size={28} color={getTokenColor(mode, "iconMuted")} />
             </View>
           )}
           <View className="ml-4">
@@ -123,14 +160,60 @@ export default function ProfileScreen() {
               <Ionicons
                 name={item.icon as any}
                 size={22}
-                color="#171717"
+                color={getTokenColor(mode, "icon")}
               />
               <Text className="flex-1 ml-3 text-base text-foreground">
                 {item.label}
               </Text>
-              <Ionicons name="chevron-forward" size={20} color="#737373" />
+              <Ionicons name="chevron-forward" size={20} color={getTokenColor(mode, "iconMuted")} />
             </Pressable>
           ))}
+        </View>
+
+        <View className="mt-4 bg-card rounded-xl border border-border p-4">
+          <Text className="text-base font-semibold text-foreground mb-3">Appearance</Text>
+          <View className="flex-row gap-2">
+            {[
+              { label: "System", value: "system" },
+              { label: "Light", value: "light" },
+              { label: "Dark", value: "dark" },
+            ].map((option) => {
+              const isActive = themePreference === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => {
+                    const value = option.value as ThemePreference;
+                    setThemePreference(value);
+                    setStoredThemePreference(value);
+                  }}
+                  className={`flex-1 items-center rounded-lg border px-3 py-2 ${
+                    isActive ? "border-primary bg-primary/10" : "border-border bg-background"
+                  }`}
+                >
+                  <Text className={isActive ? "text-primary font-semibold" : "text-foreground"}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View className="mt-4 bg-card rounded-xl border border-border p-4">
+          <Text className="text-base font-semibold text-foreground mb-2">Payouts</Text>
+          <Text className="text-sm text-muted-foreground mb-3">
+            Status: {payoutStatusLabel}
+          </Text>
+          <Pressable
+            onPress={handleOpenPayoutSetup}
+            disabled={isOpeningPayoutSetup}
+            className={`rounded-lg px-3 py-3 items-center ${isOpeningPayoutSetup ? "bg-primary/70" : "bg-primary"}`}
+          >
+            <Text className="text-primary-foreground font-semibold">
+              {isOpeningPayoutSetup ? "Opening..." : "Set up payouts"}
+            </Text>
+          </Pressable>
         </View>
 
         {/* Logout Button */}
@@ -149,3 +232,4 @@ export default function ProfileScreen() {
     </SafeAreaView>
   );
 }
+

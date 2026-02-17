@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
+import { useColorScheme } from "nativewind";
 import MapView, { Callout, Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { View, Pressable, Image } from "react-native";
 import { Text } from "@/components/ui/text";
 import type { SearchMapProps } from "./SearchMap";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 export function SearchMap({
   region,
@@ -14,6 +16,7 @@ export function SearchMap({
   onMarkerPress,
   onOfferPress,
 }: SearchMapProps) {
+  const mode = resolveThemeMode(useColorScheme());
   const containerClasses = `${
     containerClassName ?? "h-40 w-full rounded-xl overflow-hidden"
   } relative`;
@@ -59,14 +62,18 @@ export function SearchMap({
               onPress={() => onMarkerPress?.(car.id)}
             >
               <View
-                className={`px-2 py-1 rounded-full shadow ${
-                  selectedCarId === car.id ? "bg-black" : "bg-white"
-                }`}
+                className="px-2 py-1 rounded-full shadow"
+                style={{
+                  backgroundColor:
+                    selectedCarId === car.id
+                      ? getTokenColor(mode, "mapPopupCtaBg")
+                      : getTokenColor(mode, "mapMarkerBg"),
+                }}
               >
                 <View>
                   <Text
                     className={`text-xs font-semibold ${
-                      selectedCarId === car.id ? "text-white" : "text-foreground"
+                      selectedCarId === car.id ? "text-primary-foreground" : "text-foreground"
                     }`}
                   >
                     ${car.pricePerDay}
@@ -109,3 +116,4 @@ export function SearchMap({
     </Pressable>
   );
 }
+

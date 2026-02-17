@@ -1,5 +1,7 @@
 import { View, TextInput, Pressable } from "react-native";
+import { useColorScheme } from "nativewind";
 import { Ionicons } from "@expo/vector-icons";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 interface SearchBarProps {
   value: string;
@@ -14,21 +16,25 @@ export function SearchBar({
   placeholder = "Search cars...",
   onFilterPress,
 }: SearchBarProps) {
+  const mode = resolveThemeMode(useColorScheme());
+  const strongIconColor = getTokenColor(mode, "foreground");
+
   return (
     <View className="flex-row items-center bg-secondary rounded-xl px-4 py-3 mb-4">
-      <Ionicons name="search" size={20} color="#737373" />
+      <Ionicons name="search" size={20} color={strongIconColor} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#737373"
+        placeholderTextColor={getTokenColor(mode, "placeholder")}
         className="flex-1 ml-3 text-base text-foreground"
       />
       {onFilterPress && (
         <Pressable onPress={onFilterPress} className="ml-2 p-1">
-          <Ionicons name="options-outline" size={20} color="#171717" />
+          <Ionicons name="options-outline" size={20} color={strongIconColor} />
         </Pressable>
       )}
     </View>
   );
 }
+

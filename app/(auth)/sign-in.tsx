@@ -1,4 +1,5 @@
 import { useSSO, useSignIn } from '@clerk/clerk-expo'
+import { useColorScheme } from "nativewind";
 import type { EmailCodeFactor } from '@clerk/types'
 import * as AuthSession from 'expo-auth-session'
 import { Link, useRouter } from 'expo-router'
@@ -8,6 +9,7 @@ import { Alert, Platform, Pressable, ScrollView, TextInput, View } from 'react-n
 import * as WebBrowser from 'expo-web-browser'
 
 import { Text } from '@/components/ui/text'
+import { getTokenColor, resolveThemeMode } from '@/lib/themeTokens'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -17,6 +19,7 @@ export default function Page() {
   const redirectUrl = AuthSession.makeRedirectUri({ path: 'sso-callback' })
   const redirectUrlComplete = '/(tabs)'
   const { startSSOFlow } = useSSO()
+  const mode = resolveThemeMode(useColorScheme())
 
   const [emailAddress, setEmailAddress] = React.useState('')
   const [password, setPassword] = React.useState('')
@@ -173,7 +176,7 @@ export default function Page() {
           className="bg-card border border-border rounded-xl px-4 py-3 text-base mb-3"
           value={code}
           placeholder="Enter verification code"
-          placeholderTextColor="#666666"
+          placeholderTextColor={getTokenColor(mode, 'placeholder')}
           onChangeText={(code) => setCode(code)}
           keyboardType="numeric"
         />
@@ -211,7 +214,7 @@ export default function Page() {
           autoCapitalize="none"
           value={emailAddress}
           placeholder="Enter email"
-          placeholderTextColor="#666666"
+          placeholderTextColor={getTokenColor(mode, 'placeholder')}
           onChangeText={(emailAddress) => setEmailAddress(emailAddress)}
           keyboardType="email-address"
         />
@@ -222,7 +225,7 @@ export default function Page() {
           className="bg-background border border-border rounded-xl px-4 py-3 text-base"
           value={password}
           placeholder="Enter password"
-          placeholderTextColor="#666666"
+          placeholderTextColor={getTokenColor(mode, 'placeholder')}
           secureTextEntry={true}
           onChangeText={(password) => setPassword(password)}
         />
@@ -253,7 +256,7 @@ export default function Page() {
           className="bg-card border border-border rounded-xl px-4 py-3 flex-row items-center justify-center gap-2"
           onPress={() => onSocialPress('apple')}
         >
-          <Ionicons name="logo-apple" size={18} color="#171717" />
+          <Ionicons name="logo-apple" size={18} color={getTokenColor(mode, 'icon')} />
           <Text className="text-sm font-semibold text-foreground">
             Continue with Apple
           </Text>
@@ -262,7 +265,7 @@ export default function Page() {
           className="bg-card border border-border rounded-xl px-4 py-3 flex-row items-center justify-center gap-2"
           onPress={() => onSocialPress('google')}
         >
-          <Ionicons name="logo-google" size={18} color="#171717" />
+          <Ionicons name="logo-google" size={18} color={getTokenColor(mode, 'icon')} />
           <Text className="text-sm font-semibold text-foreground">
             Continue with Google
           </Text>
@@ -271,7 +274,7 @@ export default function Page() {
           className="bg-card border border-border rounded-xl px-4 py-3 flex-row items-center justify-center gap-2"
           onPress={() => onSocialPress('facebook')}
         >
-          <Ionicons name="logo-facebook" size={18} color="#171717" />
+          <Ionicons name="logo-facebook" size={18} color={getTokenColor(mode, 'icon')} />
           <Text className="text-sm font-semibold text-foreground">
             Continue with Facebook
           </Text>
@@ -289,3 +292,4 @@ export default function Page() {
     </ScrollView>
   )
 }
+

@@ -1,7 +1,9 @@
 import { View, Image, Pressable } from "react-native";
+import { useColorScheme } from "nativewind";
 import { Text } from "@/components/ui/text";
 import { Link } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 type CarCardProps = {
   car: {
@@ -20,6 +22,8 @@ type CarCardProps = {
 };
 
 export function CarCard({ car, onPress, highlighted = false }: CarCardProps) {
+  const mode = resolveThemeMode(useColorScheme());
+
   return (
     <Link href={`/car/${car.id}`} asChild>
       <Pressable
@@ -42,7 +46,7 @@ export function CarCard({ car, onPress, highlighted = false }: CarCardProps) {
               <Text className="text-sm text-muted-foreground">{car.year}</Text>
             </View>
             <View className="flex-row items-center">
-              <Ionicons name="star" size={14} color="#171717" />
+              <Ionicons name="star" size={14} color={getTokenColor(mode, "ratingStar")} />
               <Text className="text-sm font-medium text-foreground ml-1">
                 {5}
               </Text>
@@ -52,7 +56,7 @@ export function CarCard({ car, onPress, highlighted = false }: CarCardProps) {
             </View>
           </View>
           <View className="flex-row items-center mb-3">
-            <Ionicons name="location-outline" size={14} color="#737373" />
+            <Ionicons name="location-outline" size={14} color={getTokenColor(mode, "iconMuted")} />
             <Text className="text-sm text-muted-foreground ml-1">
               {car.location?.city}
             </Text>
@@ -68,5 +72,6 @@ export function CarCard({ car, onPress, highlighted = false }: CarCardProps) {
     </Link>
   );
 }
+
 
 

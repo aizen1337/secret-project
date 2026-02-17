@@ -29,9 +29,9 @@ function FitToCars({
 }
 
 function createPriceIcon(pricePerDay: number, isSelected: boolean) {
-  const background = isSelected ? "#0f172a" : "#ffffff";
-  const color = isSelected ? "#ffffff" : "#111827";
-  const border = isSelected ? "#0f172a" : "#e5e7eb";
+  const background = isSelected ? "var(--map-popup-cta-bg)" : "var(--map-marker-bg)";
+  const color = isSelected ? "var(--map-popup-cta-fg)" : "var(--map-marker-fg)";
+  const border = isSelected ? "var(--map-popup-cta-bg)" : "var(--map-marker-border)";
 
   return L.divIcon({
     className: "",
@@ -50,7 +50,7 @@ function createPriceIcon(pricePerDay: number, isSelected: boolean) {
       font-weight: 700;
       line-height: 1;
       letter-spacing: 0.01em;
-      box-shadow: 0 8px 22px rgba(15,23,42,0.24);
+      box-shadow: var(--shadow-lg);
       white-space: nowrap;
       transform: translateY(-10px);
       transition: all 120ms ease;
@@ -139,8 +139,8 @@ export function SearchMap({
                     width: 220,
                     borderRadius: 14,
                     overflow: "hidden",
-                    background: "#ffffff",
-                    boxShadow: "0 20px 45px rgba(15,23,42,0.2)",
+                    background: "var(--map-popup-bg)",
+                    boxShadow: "var(--shadow-xl)",
                   }}
                 >
                   {car.imageUrl ? (
@@ -159,7 +159,7 @@ export function SearchMap({
                       style={{
                         width: "100%",
                         height: 116,
-                        background: "#f3f4f6",
+                        background: "var(--surface-subtle)",
                       }}
                     />
                   )}
@@ -169,7 +169,7 @@ export function SearchMap({
                         margin: 0,
                         fontSize: 13,
                         fontWeight: 700,
-                        color: "#111827",
+                        color: "var(--map-marker-fg)",
                         lineHeight: 1.3,
                       }}
                     >
@@ -179,7 +179,7 @@ export function SearchMap({
                       style={{
                         margin: "4px 0 0 0",
                         fontSize: 12,
-                        color: "#6b7280",
+                        color: "var(--map-popup-muted)",
                       }}
                     >
                       {car.locationCity}, {car.locationCountry}
@@ -189,7 +189,7 @@ export function SearchMap({
                         margin: "6px 0 10px 0",
                         fontSize: 13,
                         fontWeight: 700,
-                        color: "#111827",
+                        color: "var(--map-marker-fg)",
                       }}
                     >
                       ${car.pricePerDay} / day
@@ -202,8 +202,8 @@ export function SearchMap({
                         border: 0,
                         borderRadius: 10,
                         padding: "9px 10px",
-                        background: "#111827",
-                        color: "#ffffff",
+                        background: "var(--map-popup-cta-bg)",
+                        color: "var(--map-popup-cta-fg)",
                         fontSize: 12,
                         fontWeight: 700,
                         cursor: "pointer",

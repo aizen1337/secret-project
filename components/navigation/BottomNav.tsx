@@ -1,10 +1,12 @@
-import { View, Pressable, useColorScheme } from "react-native";
+import { View, Pressable } from "react-native";
+import { useColorScheme } from "nativewind";
 import { Link, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Text } from "@/components/ui/text";
 import { useAuth } from "@clerk/clerk-expo";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 type NavItem = {
   href: string;
@@ -28,11 +30,11 @@ const signedInItems: NavItem[] = [
 export function BottomNav(_: Partial<BottomTabBarProps> = {}) {
   const pathname = usePathname();
   const { isLoaded, isSignedIn } = useAuth();
-  const colorScheme = useColorScheme();
+  const mode = resolveThemeMode(useColorScheme());
   const insets = useSafeAreaInsets();
   const items = !isLoaded || !isSignedIn ? signedOutItems : signedInItems;
-  const activeColor = colorScheme === "dark" ? "#fafafa" : "#171717";
-  const inactiveColor = colorScheme === "dark" ? "#9ca3af" : "#737373";
+  const activeColor = getTokenColor(mode, "primary");
+  const inactiveColor = getTokenColor(mode, "iconMuted");
 
   return (
     <View className="bg-card border-t border-border">
@@ -61,3 +63,4 @@ export function BottomNav(_: Partial<BottomTabBarProps> = {}) {
     </View>
   );
 }
+
