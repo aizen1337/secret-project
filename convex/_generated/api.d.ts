@@ -8,12 +8,18 @@
  * @module
  */
 
+import type * as bookingReviews from "../bookingReviews.js";
 import type * as bookings from "../bookings.js";
 import type * as bookingsLifecycle from "../bookingsLifecycle.js";
 import type * as cars from "../cars.js";
+import type * as depositCases from "../depositCases.js";
+import type * as env from "../env.js";
 import type * as guards_bookingGuard from "../guards/bookingGuard.js";
+import type * as guards_renterVerificationGuard from "../guards/renterVerificationGuard.js";
 import type * as hostMapper from "../hostMapper.js";
 import type * as http from "../http.js";
+import type * as identity from "../identity.js";
+import type * as paymentsOrchestrator from "../paymentsOrchestrator.js";
 import type * as seeders_bookings from "../seeders/bookings.js";
 import type * as seeders_cars from "../seeders/cars.js";
 import type * as seeders_helpers from "../seeders/helpers.js";
@@ -23,8 +29,13 @@ import type * as stripe from "../stripe.js";
 import type * as stripeConnect from "../stripeConnect.js";
 import type * as stripePayouts from "../stripePayouts.js";
 import type * as stripeWebhook from "../stripeWebhook.js";
+import type * as stripeWebhookEvents from "../stripeWebhookEvents.js";
 import type * as userMapper from "../userMapper.js";
 import type * as users from "../users.js";
+import type * as verification from "../verification.js";
+import type * as verificationPolicy from "../verificationPolicy.js";
+import type * as verificationProvider from "../verificationProvider.js";
+import type * as verificationProviderStripe from "../verificationProviderStripe.js";
 
 import type {
   ApiFromModules,
@@ -33,12 +44,18 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  bookingReviews: typeof bookingReviews;
   bookings: typeof bookings;
   bookingsLifecycle: typeof bookingsLifecycle;
   cars: typeof cars;
+  depositCases: typeof depositCases;
+  env: typeof env;
   "guards/bookingGuard": typeof guards_bookingGuard;
+  "guards/renterVerificationGuard": typeof guards_renterVerificationGuard;
   hostMapper: typeof hostMapper;
   http: typeof http;
+  identity: typeof identity;
+  paymentsOrchestrator: typeof paymentsOrchestrator;
   "seeders/bookings": typeof seeders_bookings;
   "seeders/cars": typeof seeders_cars;
   "seeders/helpers": typeof seeders_helpers;
@@ -48,8 +65,13 @@ declare const fullApi: ApiFromModules<{
   stripeConnect: typeof stripeConnect;
   stripePayouts: typeof stripePayouts;
   stripeWebhook: typeof stripeWebhook;
+  stripeWebhookEvents: typeof stripeWebhookEvents;
   userMapper: typeof userMapper;
   users: typeof users;
+  verification: typeof verification;
+  verificationPolicy: typeof verificationPolicy;
+  verificationProvider: typeof verificationProvider;
+  verificationProviderStripe: typeof verificationProviderStripe;
 }>;
 
 /**
@@ -78,4 +100,47 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  actionCache: {
+    crons: {
+      purge: FunctionReference<
+        "mutation",
+        "internal",
+        { expiresAt?: number },
+        null
+      >;
+    };
+    lib: {
+      get: FunctionReference<
+        "query",
+        "internal",
+        { args: any; name: string; ttl: number | null },
+        { kind: "hit"; value: any } | { expiredEntry?: string; kind: "miss" }
+      >;
+      put: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          args: any;
+          expiredEntry?: string;
+          name: string;
+          ttl: number | null;
+          value: any;
+        },
+        { cacheHit: boolean; deletedExpiredEntry: boolean }
+      >;
+      remove: FunctionReference<
+        "mutation",
+        "internal",
+        { args: any; name: string },
+        null
+      >;
+      removeAll: FunctionReference<
+        "mutation",
+        "internal",
+        { batchSize?: number; before?: number; name?: string },
+        null
+      >;
+    };
+  };
+};

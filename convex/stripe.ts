@@ -1,7 +1,13 @@
 import { v } from "convex/values";
-import { action, internalMutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { mapClerkUser } from "./userMapper";
+import { assertRenterCanBook } from "./guards/renterVerificationGuard";
+
+type PaymentStrategy = "destination_manual_capture" | "platform_transfer_fallback";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEPOSIT_CLAIM_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 function getStripeSecretKey() {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -31,16 +37,161 @@ async function stripeFormRequest(path: string, body: URLSearchParams, idempotenc
   return payload;
 }
 
+async function stripeGetRequest(path: string) {
+  const stripeSecretKey = getStripeSecretKey();
+  const response = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${stripeSecretKey}`,
+    },
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload?.error?.message ?? "Stripe request failed.");
+  }
+  return payload;
+}
+
+function toTimestamp(value: string, field: string) {
+  const ts = new Date(value).getTime();
+  if (!Number.isFinite(ts)) {
+    throw new Error(`INVALID_INPUT: Invalid ${field}.`);
+  }
+  return ts;
+}
+
+function calculateDaysInclusive(startTs: number, endTs: number) {
+  const diff = endTs - startTs;
+  if (diff < 0) {
+    throw new Error("INVALID_INPUT: End date must not be before start date.");
+  }
+  return Math.max(1, Math.ceil((diff + 1) / DAY_MS));
+}
+
+function isReservationBlockingStatus(status: string) {
+  return status === "payment_pending" || status === "confirmed";
+}
+
+function datesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string) {
+  const aStartTs = new Date(aStart).getTime();
+  const aEndTs = new Date(aEnd).getTime();
+  const bStartTs = new Date(bStart).getTime();
+  const bEndTs = new Date(bEnd).getTime();
+  if (!Number.isFinite(aStartTs) || !Number.isFinite(aEndTs) || !Number.isFinite(bStartTs) || !Number.isFinite(bEndTs)) {
+    return false;
+  }
+  return aStartTs <= bEndTs && aEndTs >= bStartTs;
+}
+
+function appendCheckoutLineItem(body: URLSearchParams, index: number, amount: number, name: string) {
+  body.set(`line_items[${index}][price_data][currency]`, "usd");
+  body.set(`line_items[${index}][price_data][unit_amount]`, String(Math.round(amount * 100)));
+  body.set(`line_items[${index}][price_data][product_data][name]`, name);
+  body.set(`line_items[${index}][quantity]`, "1");
+}
+
+function buildPaymentSessionBody(args: {
+  successUrl: string;
+  cancelUrl: string;
+  customerId: string;
+  carName: string;
+  days: number;
+  rentalAmount: number;
+  serviceFee: number;
+  depositAmount: number;
+  paymentId: string;
+  bookingId: string;
+  paymentPurpose: "initial_immediate_payment" | "manual_pay_now";
+}) {
+  const body = new URLSearchParams({
+    mode: "payment",
+    success_url: args.successUrl,
+    cancel_url: args.cancelUrl,
+    customer: args.customerId,
+    "payment_method_types[0]": "card",
+    "metadata[paymentId]": args.paymentId,
+    "metadata[bookingId]": args.bookingId,
+    "metadata[paymentPurpose]": args.paymentPurpose,
+  });
+  appendCheckoutLineItem(body, 0, args.rentalAmount, `${args.carName} rental (${args.days} days)`);
+  appendCheckoutLineItem(body, 1, args.serviceFee, "Service fee (10%)");
+  if (args.depositAmount > 0) {
+    appendCheckoutLineItem(body, 2, args.depositAmount, "Security deposit");
+  }
+  body.set("payment_intent_data[metadata][paymentId]", args.paymentId);
+  body.set("payment_intent_data[metadata][bookingId]", args.bookingId);
+  body.set("payment_intent_data[metadata][paymentPurpose]", args.paymentPurpose);
+  return body;
+}
+
+async function ensureStripeCustomerForRenter(ctx: any, args: {
+  renterId: string;
+  paymentId: string;
+  existingStripeCustomerId?: string | null;
+  clerkUserId: string;
+}) {
+  if (args.existingStripeCustomerId) {
+    return args.existingStripeCustomerId;
+  }
+  const customer = await stripeFormRequest(
+    "customers",
+    new URLSearchParams({
+      "metadata[renterId]": args.renterId,
+      "metadata[clerkUserId]": args.clerkUserId,
+    }),
+    `customer-${args.renterId}`,
+  );
+  const stripeCustomerId = String(customer.id);
+  await ctx.runMutation(internal.stripe.setStripeCustomerForRenterAndPaymentInternal, {
+    renterId: args.renterId as any,
+    paymentId: args.paymentId as any,
+    stripeCustomerId,
+  });
+  return stripeCustomerId;
+}
+
+async function markPaymentAsPaidAndSchedule(ctx: any, payment: any, args: {
+  stripePaymentIntentId?: string;
+  stripeChargeId?: string;
+  eventId: string;
+}) {
+  const now = Date.now();
+  const depositAmount = Number(payment.depositAmount ?? 0);
+  await ctx.db.patch(payment._id, {
+    status: "paid",
+    payoutStatus: "eligible",
+    stripePaymentIntentId: args.stripePaymentIntentId ?? payment.stripePaymentIntentId,
+    stripeChargeId: args.stripeChargeId ?? payment.stripeChargeId,
+    paidAt: now,
+    depositStatus: depositAmount > 0 ? "held" : "not_applicable",
+    lastWebhookEventId: args.eventId,
+    updatedAt: now,
+  });
+  await ctx.db.patch(payment.bookingId, {
+    status: "confirmed",
+    updatedAt: now,
+  });
+  await ctx.scheduler.runAt(
+    new Date(payment.releaseAt),
+    internal.stripePayouts.releaseHostPayoutInternal,
+    { paymentId: payment._id },
+  );
+  if (depositAmount > 0 && typeof payment.depositClaimWindowEndsAt === "number") {
+    await ctx.scheduler.runAt(
+      new Date(payment.depositClaimWindowEndsAt),
+      (internal as any).depositCases.autoRefundDepositIfNoCaseInternal,
+      { paymentId: payment._id },
+    );
+  }
+}
+
 export const createCheckoutSession = action({
   args: {
-    carId: v.string(),
-    carName: v.string(),
-    pricePerDay: v.number(),
-    days: v.number(),
+    carId: v.id("cars"),
     successUrl: v.string(),
     cancelUrl: v.string(),
-    startDate: v.optional(v.string()),
-    endDate: v.optional(v.string()),
+    startDate: v.string(),
+    endDate: v.string(),
   },
   async handler(ctx, args) {
     if (process.env.ENABLE_CONNECT_PAYOUTS === "false") {
@@ -52,69 +203,60 @@ export const createCheckoutSession = action({
       throw new Error("You must be signed in to continue checkout.");
     }
 
-    if (!Number.isInteger(args.days) || args.days < 1) {
-      throw new Error("Booking days must be at least 1.");
-    }
-    if (!Number.isFinite(args.pricePerDay) || args.pricePerDay <= 0) {
-      throw new Error("Invalid daily price.");
-    }
-
-    const now = new Date();
-    const defaultStart = new Date(now);
-    const defaultEnd = new Date(now);
-    defaultEnd.setDate(defaultEnd.getDate() + args.days - 1);
-    const startDate = args.startDate ?? defaultStart.toISOString();
-    const endDate = args.endDate ?? defaultEnd.toISOString();
-    const releaseAt = new Date(endDate).getTime();
-    if (!Number.isFinite(releaseAt)) {
-      throw new Error("Invalid trip dates for payout release.");
-    }
-
-    const subtotal = args.pricePerDay * args.days;
-    const serviceFee = Math.round(subtotal * 0.1);
-    const hostAmount = subtotal - serviceFee;
+    await assertRenterCanBook(ctx);
 
     const pending = await ctx.runMutation(internal.stripe.createPendingBookingPaymentInternal, {
       carId: args.carId,
-      startDate,
-      endDate,
-      rentalAmount: subtotal,
-      platformFeeAmount: serviceFee,
-      hostAmount,
+      startDate: args.startDate,
+      endDate: args.endDate,
       currency: "usd",
-      releaseAt,
     });
 
-    const body = new URLSearchParams({
-      mode: "payment",
-      success_url: args.successUrl,
-      cancel_url: args.cancelUrl,
-      "line_items[0][price_data][currency]": "usd",
-      "line_items[0][price_data][unit_amount]": String(subtotal * 100),
-      "line_items[0][price_data][product_data][name]": `${args.carName} rental (${args.days} days)`,
-      "line_items[0][quantity]": "1",
-      "line_items[1][price_data][currency]": "usd",
-      "line_items[1][price_data][unit_amount]": String(serviceFee * 100),
-      "line_items[1][price_data][product_data][name]": "Service fee (10%)",
-      "line_items[1][quantity]": "1",
-      "metadata[paymentId]": String(pending.paymentId),
-      "metadata[bookingId]": String(pending.bookingId),
-      "metadata[carId]": args.carId,
-      "metadata[hostId]": String(pending.hostId),
-      "metadata[renterId]": String(pending.renterId),
-      "metadata[days]": String(args.days),
-      "metadata[subtotal]": String(subtotal),
-      "metadata[serviceFee]": String(serviceFee),
-      "metadata[hostAmount]": String(hostAmount),
-      "metadata[releaseAt]": String(releaseAt),
-      client_reference_id: identity.subject,
+    const stripeCustomerId = await ensureStripeCustomerForRenter(ctx, {
+      renterId: String(pending.renterId),
+      paymentId: String(pending.paymentId),
+      existingStripeCustomerId: pending.renterStripeCustomerId ?? null,
+      clerkUserId: identity.subject,
     });
 
-    const payload = await stripeFormRequest(
-      "checkout/sessions",
-      body,
-      `checkout-${String(pending.paymentId)}`,
-    );
+    let payload: any;
+    if (pending.requiresImmediatePayment) {
+      const body = buildPaymentSessionBody({
+        successUrl: args.successUrl,
+        cancelUrl: args.cancelUrl,
+        customerId: stripeCustomerId,
+        carName: pending.carName,
+        days: pending.days,
+        rentalAmount: pending.rentalAmount,
+        serviceFee: pending.platformFeeAmount,
+        depositAmount: pending.depositAmount,
+        paymentId: String(pending.paymentId),
+        bookingId: String(pending.bookingId),
+        paymentPurpose: "initial_immediate_payment",
+      });
+      payload = await stripeFormRequest(
+        "checkout/sessions",
+        body,
+        `reservation-initial-payment-${String(pending.paymentId)}`,
+      );
+    } else {
+      const body = new URLSearchParams({
+        mode: "setup",
+        success_url: args.successUrl,
+        cancel_url: args.cancelUrl,
+        customer: stripeCustomerId,
+        "payment_method_types[0]": "card",
+        "metadata[paymentId]": String(pending.paymentId),
+        "metadata[bookingId]": String(pending.bookingId),
+      });
+      body.set("setup_intent_data[metadata][paymentId]", String(pending.paymentId));
+      body.set("setup_intent_data[metadata][bookingId]", String(pending.bookingId));
+      payload = await stripeFormRequest(
+        "checkout/sessions",
+        body,
+        `reservation-setup-${String(pending.paymentId)}`,
+      );
+    }
 
     await ctx.runMutation(internal.stripe.attachCheckoutSessionInternal, {
       paymentId: pending.paymentId,
@@ -124,50 +266,143 @@ export const createCheckoutSession = action({
 
     return {
       url: payload.url as string,
-      subtotal,
-      serviceFee,
-      hostAmount,
-      total: subtotal + serviceFee,
+      subtotal: pending.rentalAmount,
+      serviceFee: pending.platformFeeAmount,
+      hostAmount: pending.hostAmount,
+      depositAmount: pending.depositAmount,
+      total: pending.totalAmount,
+      requiresImmediatePayment: pending.requiresImmediatePayment,
+      paymentDueAt: pending.paymentDueAt,
       bookingId: pending.bookingId,
       paymentId: pending.paymentId,
     };
   },
 });
 
+export const createReservationPayNowSession = action({
+  args: {
+    bookingId: v.id("bookings"),
+    successUrl: v.string(),
+    cancelUrl: v.string(),
+  },
+  async handler(ctx, args) {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("UNAUTHORIZED: You must be signed in.");
+    }
+    await assertRenterCanBook(ctx);
+
+    const prepared = await ctx.runMutation(internal.stripe.prepareReservationPayNowInternal, {
+      bookingId: args.bookingId,
+    });
+
+    const stripeCustomerId = await ensureStripeCustomerForRenter(ctx, {
+      renterId: String(prepared.renterId),
+      paymentId: String(prepared.paymentId),
+      existingStripeCustomerId: prepared.stripeCustomerId ?? null,
+      clerkUserId: identity.subject,
+    });
+
+    const body = buildPaymentSessionBody({
+      successUrl: args.successUrl,
+      cancelUrl: args.cancelUrl,
+      customerId: stripeCustomerId,
+      carName: prepared.carName,
+      days: prepared.days,
+      rentalAmount: prepared.rentalAmount,
+      serviceFee: prepared.platformFeeAmount,
+      depositAmount: prepared.depositAmount,
+      paymentId: String(prepared.paymentId),
+      bookingId: String(prepared.bookingId),
+      paymentPurpose: "manual_pay_now",
+    });
+    const payload = await stripeFormRequest(
+      "checkout/sessions",
+      body,
+      `reservation-pay-now-${String(prepared.paymentId)}-${String(prepared.idempotencySuffix)}`,
+    );
+    await ctx.runMutation(internal.stripe.attachCheckoutSessionInternal, {
+      paymentId: prepared.paymentId,
+      bookingId: prepared.bookingId,
+      stripeCheckoutSessionId: payload.id as string,
+    });
+
+    return {
+      url: payload.url as string,
+      bookingId: prepared.bookingId,
+      paymentId: prepared.paymentId,
+      paymentDueAt: prepared.paymentDueAt,
+      total: prepared.totalAmount,
+    };
+  },
+});
+
 export const createPendingBookingPaymentInternal = internalMutation({
   args: {
-    carId: v.string(),
+    carId: v.id("cars"),
     startDate: v.string(),
     endDate: v.string(),
-    rentalAmount: v.number(),
-    platformFeeAmount: v.number(),
-    hostAmount: v.number(),
-    currency: v.string(),
-    releaseAt: v.number(),
+    currency: v.optional(v.string()),
   },
   async handler(ctx, args) {
     const user = await mapClerkUser(ctx);
-    const car = await ctx.db.get(args.carId as any);
+    const car = await ctx.db.get(args.carId);
     if (!car || !car.isActive) {
-      throw new Error("Car not available.");
+      throw new Error("NOT_FOUND: Car not available.");
     }
+
+    const startTs = toTimestamp(args.startDate, "startDate");
+    const endTs = toTimestamp(args.endDate, "endDate");
+    const days = calculateDaysInclusive(startTs, endTs);
+
+    if (car.availableFrom && startTs < new Date(car.availableFrom).getTime()) {
+      throw new Error("INVALID_INPUT: Selected period is before car availability.");
+    }
+    if (car.availableUntil && endTs > new Date(car.availableUntil).getTime()) {
+      throw new Error("INVALID_INPUT: Selected period is after car availability.");
+    }
+
+    const existingForCar = await ctx.db
+      .query("bookings")
+      .withIndex("by_car", (q) => q.eq("carId", car._id))
+      .collect();
+    const overlap = existingForCar.some((booking) => {
+      if (!isReservationBlockingStatus(booking.status)) return false;
+      return datesOverlap(booking.startDate, booking.endDate, args.startDate, args.endDate);
+    });
+    if (overlap) {
+      throw new Error("INVALID_INPUT: Car already booked for selected dates.");
+    }
+
     const host = await ctx.db.get(car.hostId);
     if (!host) {
-      throw new Error("Host not found.");
+      throw new Error("NOT_FOUND: Host not found.");
+    }
+    if (String(host.userId) === String(user._id)) {
+      throw new Error("UNAUTHORIZED: You cannot book your own listing.");
     }
     if (!host.stripeConnectAccountId || !host.stripeOnboardingComplete || !host.stripePayoutsEnabled) {
-      throw new Error("Host has not completed payout onboarding yet.");
+      throw new Error("UNAVAILABLE: Host has not completed payout onboarding yet.");
     }
+
+    const rentalAmount = car.pricePerDay * days;
+    const platformFeeAmount = Math.round(rentalAmount * 0.1);
+    const hostAmount = rentalAmount - platformFeeAmount;
+    const depositAmount = Number(car.depositAmount ?? 0);
+    const paymentDueAt = startTs - DAY_MS;
+    const releaseAt = endTs;
+    const depositClaimWindowEndsAt = releaseAt + DEPOSIT_CLAIM_WINDOW_MS;
+    const now = Date.now();
 
     const bookingId = await ctx.db.insert("bookings", {
       carId: car._id,
       renterId: user._id,
       startDate: args.startDate,
       endDate: args.endDate,
-      totalPrice: args.rentalAmount,
-      status: "payment_pending",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      totalPrice: rentalAmount,
+      status: "pending",
+      createdAt: now,
+      updatedAt: now,
     });
 
     const paymentId = await ctx.db.insert("payments", {
@@ -176,15 +411,22 @@ export const createPendingBookingPaymentInternal = internalMutation({
       renterId: user._id,
       hostId: host._id,
       stripeCheckoutSessionId: "",
-      currency: args.currency,
-      rentalAmount: args.rentalAmount,
-      platformFeeAmount: args.platformFeeAmount,
-      hostAmount: args.hostAmount,
-      status: "checkout_created",
+      stripeCustomerId: user.stripeCustomerId,
+      currency: args.currency ?? "usd",
+      paymentStrategy: "platform_transfer_fallback",
+      captureStatus: "not_required",
+      rentalAmount,
+      platformFeeAmount,
+      hostAmount,
+      depositAmount,
+      depositStatus: "not_applicable",
+      depositClaimWindowEndsAt,
+      paymentDueAt,
+      status: "method_collection_pending",
       payoutStatus: "blocked",
-      releaseAt: args.releaseAt,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      releaseAt,
+      createdAt: now,
+      updatedAt: now,
     });
 
     await ctx.db.patch(bookingId, {
@@ -192,7 +434,341 @@ export const createPendingBookingPaymentInternal = internalMutation({
       updatedAt: Date.now(),
     });
 
-    return { bookingId, paymentId, hostId: host._id, renterId: user._id };
+    return {
+      bookingId,
+      paymentId,
+      hostId: host._id,
+      renterId: user._id,
+      renterStripeCustomerId: user.stripeCustomerId ?? null,
+      days,
+      carName: car.title || `${car.make} ${car.model}`,
+      rentalAmount,
+      platformFeeAmount,
+      hostAmount,
+      depositAmount,
+      totalAmount: rentalAmount + platformFeeAmount + depositAmount,
+      paymentDueAt,
+      requiresImmediatePayment: paymentDueAt <= Date.now(),
+    };
+  },
+});
+
+export const setStripeCustomerForRenterAndPaymentInternal = internalMutation({
+  args: {
+    renterId: v.id("users"),
+    paymentId: v.id("payments"),
+    stripeCustomerId: v.string(),
+  },
+  async handler(ctx, args) {
+    await ctx.db.patch(args.renterId, {
+      stripeCustomerId: args.stripeCustomerId,
+    });
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) return;
+    await ctx.db.patch(args.paymentId, {
+      stripeCustomerId: args.stripeCustomerId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const prepareReservationPayNowInternal = internalMutation({
+  args: {
+    bookingId: v.id("bookings"),
+  },
+  async handler(ctx, args) {
+    const user = await mapClerkUser(ctx);
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) {
+      throw new Error("NOT_FOUND: Booking not found.");
+    }
+    if (String(booking.renterId) !== String(user._id)) {
+      throw new Error("UNAUTHORIZED: This booking does not belong to you.");
+    }
+    if (!booking.paymentId) {
+      throw new Error("NOT_FOUND: Booking payment not found.");
+    }
+    const payment = await ctx.db.get(booking.paymentId);
+    if (!payment) {
+      throw new Error("NOT_FOUND: Payment not found.");
+    }
+    if (payment.status === "paid") {
+      throw new Error("INVALID_INPUT: Reservation is already paid.");
+    }
+    if (booking.status !== "payment_pending" || payment.status !== "method_saved") {
+      throw new Error("INVALID_INPUT: Reservation is not ready for pay now.");
+    }
+    if (typeof payment.paymentDueAt === "number" && Date.now() >= payment.paymentDueAt) {
+      throw new Error("INVALID_INPUT: Payment deadline has passed.");
+    }
+    const car = await ctx.db.get(payment.carId);
+    const now = Date.now();
+    await ctx.db.patch(payment._id, {
+      updatedAt: now,
+    });
+    const days = calculateDaysInclusive(
+      toTimestamp(booking.startDate, "startDate"),
+      toTimestamp(booking.endDate, "endDate"),
+    );
+    const totalAmount =
+      Number(payment.rentalAmount ?? 0) +
+      Number(payment.platformFeeAmount ?? 0) +
+      Number(payment.depositAmount ?? 0);
+    return {
+      bookingId: booking._id,
+      paymentId: payment._id,
+      renterId: payment.renterId,
+      stripeCustomerId: payment.stripeCustomerId ?? user.stripeCustomerId ?? null,
+      paymentDueAt: payment.paymentDueAt ?? null,
+      rentalAmount: payment.rentalAmount,
+      platformFeeAmount: payment.platformFeeAmount,
+      depositAmount: Number(payment.depositAmount ?? 0),
+      totalAmount,
+      days,
+      carName: car?.title || `${car?.make ?? "Car"} ${car?.model ?? ""}`.trim(),
+      idempotencySuffix: now,
+    };
+  },
+});
+
+export const markPaymentMethodCollectedByCheckoutSessionInternal = internalMutation({
+  args: {
+    stripeCheckoutSessionId: v.string(),
+    stripeSetupIntentId: v.optional(v.string()),
+    stripePaymentMethodId: v.optional(v.string()),
+    stripeCustomerId: v.optional(v.string()),
+    eventId: v.string(),
+  },
+  async handler(ctx, args) {
+    const payment = await ctx.db
+      .query("payments")
+      .withIndex("by_checkout_session", (q) =>
+        q.eq("stripeCheckoutSessionId", args.stripeCheckoutSessionId),
+      )
+      .first();
+    if (!payment) return { ok: false, reason: "payment_not_found" } as const;
+    if (payment.lastWebhookEventId === args.eventId) return { ok: true, reason: "duplicate_event" } as const;
+    if (payment.status === "paid") return { ok: true, reason: "already_paid" } as const;
+    if (payment.status !== "method_collection_pending") {
+      return { ok: true, reason: "payment_not_waiting_for_method" } as const;
+    }
+
+    const booking = await ctx.db.get(payment.bookingId);
+    if (!booking) return { ok: false, reason: "booking_not_found" } as const;
+
+    const existingForCar = await ctx.db
+      .query("bookings")
+      .withIndex("by_car", (q) => q.eq("carId", booking.carId))
+      .collect();
+    const overlap = existingForCar.some((candidate) => {
+      if (String(candidate._id) === String(booking._id)) return false;
+      if (!isReservationBlockingStatus(candidate.status)) return false;
+      return datesOverlap(candidate.startDate, candidate.endDate, booking.startDate, booking.endDate);
+    });
+    if (overlap) {
+      const now = Date.now();
+      await ctx.db.patch(payment._id, {
+        status: "cancelled",
+        lastWebhookEventId: args.eventId,
+        updatedAt: now,
+      });
+      await ctx.db.patch(booking._id, {
+        status: "cancelled",
+        updatedAt: now,
+      });
+      return { ok: false, reason: "booking_conflict_on_activation" } as const;
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(payment._id, {
+      status: "method_saved",
+      stripeSetupIntentId: args.stripeSetupIntentId ?? payment.stripeSetupIntentId,
+      stripePaymentMethodId: args.stripePaymentMethodId ?? payment.stripePaymentMethodId,
+      stripeCustomerId: args.stripeCustomerId ?? payment.stripeCustomerId,
+      lastWebhookEventId: args.eventId,
+      updatedAt: now,
+    });
+    await ctx.db.patch(booking._id, {
+      status: "payment_pending",
+      updatedAt: now,
+    });
+
+    if (typeof payment.paymentDueAt === "number" && payment.paymentDueAt > Date.now()) {
+      await ctx.scheduler.runAt(
+        new Date(payment.paymentDueAt),
+        internal.stripe.autoChargeReservationPaymentInternal,
+        { paymentId: payment._id },
+      );
+    } else {
+      await ctx.scheduler.runAfter(0, internal.stripe.autoChargeReservationPaymentInternal, {
+        paymentId: payment._id,
+      });
+    }
+
+    return { ok: true } as const;
+  },
+});
+
+export const markCheckoutSessionExpiredInternal = internalMutation({
+  args: {
+    stripeCheckoutSessionId: v.string(),
+    mode: v.optional(v.string()),
+    eventId: v.string(),
+  },
+  async handler(ctx, args) {
+    const payment = await ctx.db
+      .query("payments")
+      .withIndex("by_checkout_session", (q) =>
+        q.eq("stripeCheckoutSessionId", args.stripeCheckoutSessionId),
+      )
+      .first();
+    if (!payment) return { ok: false, reason: "payment_not_found" } as const;
+    if (payment.lastWebhookEventId === args.eventId) return { ok: true, reason: "duplicate_event" } as const;
+    const booking = await ctx.db.get(payment.bookingId);
+    if (!booking) return { ok: false, reason: "booking_not_found" } as const;
+
+    const shouldCancel =
+      payment.status === "method_collection_pending" &&
+      (args.mode === "setup" || args.mode === "payment");
+    const now = Date.now();
+    if (shouldCancel) {
+      await ctx.db.patch(payment._id, {
+        status: "cancelled",
+        lastWebhookEventId: args.eventId,
+        updatedAt: now,
+      });
+      await ctx.db.patch(booking._id, {
+        status: "cancelled",
+        updatedAt: now,
+      });
+      return { ok: true, cancelled: true } as const;
+    }
+
+    await ctx.db.patch(payment._id, {
+      lastWebhookEventId: args.eventId,
+      updatedAt: now,
+    });
+    return { ok: true, cancelled: false } as const;
+  },
+});
+
+export const markReservationPaymentChargedInternal = internalMutation({
+  args: {
+    paymentId: v.id("payments"),
+    stripePaymentIntentId: v.string(),
+    stripeChargeId: v.optional(v.string()),
+    eventId: v.string(),
+  },
+  async handler(ctx, args) {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) return { ok: false, reason: "payment_not_found" } as const;
+    if (payment.lastWebhookEventId === args.eventId) return { ok: true, reason: "duplicate_event" } as const;
+    if (payment.status === "paid") return { ok: true, reason: "already_paid" } as const;
+    await markPaymentAsPaidAndSchedule(ctx, payment, {
+      stripePaymentIntentId: args.stripePaymentIntentId,
+      stripeChargeId: args.stripeChargeId,
+      eventId: args.eventId,
+    });
+    return { ok: true } as const;
+  },
+});
+
+export const markReservationPaymentFailedInternal = internalMutation({
+  args: {
+    paymentId: v.id("payments"),
+    eventId: v.string(),
+    reason: v.optional(v.string()),
+  },
+  async handler(ctx, args) {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) return { ok: false, reason: "payment_not_found" } as const;
+    if (payment.lastWebhookEventId === args.eventId) return { ok: true, reason: "duplicate_event" } as const;
+    if (payment.status === "paid") return { ok: true, reason: "already_paid" } as const;
+    const now = Date.now();
+    await ctx.db.patch(payment._id, {
+      status: "failed",
+      payoutStatus: "blocked",
+      lastWebhookEventId: args.eventId,
+      updatedAt: now,
+    });
+    await ctx.db.patch(payment.bookingId, {
+      status: "cancelled",
+      updatedAt: now,
+    });
+    return { ok: true, reason: args.reason ?? "failed" } as const;
+  },
+});
+
+export const autoChargeReservationPaymentInternal = internalAction({
+  args: {
+    paymentId: v.id("payments"),
+  },
+  async handler(ctx, args) {
+    const payment = await ctx.runQuery(internal.stripe.getPaymentForCaptureInternal, {
+      paymentId: args.paymentId,
+    });
+    if (!payment) return { charged: false, reason: "payment_not_found" } as const;
+    if (payment.status !== "method_saved") return { charged: false, reason: "not_method_saved" } as const;
+    if (typeof payment.paymentDueAt === "number" && Date.now() < payment.paymentDueAt) {
+      return { charged: false, reason: "payment_due_not_reached" } as const;
+    }
+    if (!payment.stripeCustomerId || !payment.stripePaymentMethodId) {
+      await ctx.runMutation(internal.stripe.markReservationPaymentFailedInternal, {
+        paymentId: payment._id,
+        eventId: `auto-charge-missing-method-${String(payment._id)}`,
+        reason: "missing_saved_payment_method",
+      });
+      return { charged: false, reason: "missing_saved_payment_method" } as const;
+    }
+
+    const amount =
+      Number(payment.rentalAmount ?? 0) +
+      Number(payment.platformFeeAmount ?? 0) +
+      Number(payment.depositAmount ?? 0);
+    try {
+      const payload = await stripeFormRequest(
+        "payment_intents",
+        new URLSearchParams({
+          amount: String(Math.round(amount * 100)),
+          currency: payment.currency,
+          customer: payment.stripeCustomerId,
+          payment_method: payment.stripePaymentMethodId,
+          off_session: "true",
+          confirm: "true",
+          "metadata[paymentId]": String(payment._id),
+          "metadata[bookingId]": String(payment.bookingId),
+          "metadata[paymentPurpose]": "auto_charge_due",
+        }),
+        `auto-charge-${String(payment._id)}-${String(payment.paymentDueAt ?? payment.releaseAt)}`,
+      );
+      const intentId = String(payload?.id ?? "");
+      const status = String(payload?.status ?? "");
+      const chargeId = typeof payload?.latest_charge === "string" ? String(payload.latest_charge) : undefined;
+      if (!intentId || (status !== "succeeded" && status !== "requires_capture")) {
+        await ctx.runMutation(internal.stripe.markReservationPaymentFailedInternal, {
+          paymentId: payment._id,
+          eventId: `auto-charge-failed-${String(payment._id)}-${Date.now()}`,
+          reason: `stripe_status_${status || "unknown"}`,
+        });
+        return { charged: false, reason: "stripe_not_succeeded" } as const;
+      }
+
+      await ctx.runMutation(internal.stripe.markReservationPaymentChargedInternal, {
+        paymentId: payment._id,
+        stripePaymentIntentId: intentId,
+        stripeChargeId: chargeId,
+        eventId: `auto-charge-success-${String(payment._id)}-${Date.now()}`,
+      });
+      return { charged: true } as const;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "charge_failed";
+      await ctx.runMutation(internal.stripe.markReservationPaymentFailedInternal, {
+        paymentId: payment._id,
+        eventId: `auto-charge-error-${String(payment._id)}-${Date.now()}`,
+        reason: message,
+      });
+      return { charged: false, reason: "auto_charge_exception" } as const;
+    }
   },
 });
 
@@ -224,6 +800,7 @@ export const updateHostStripeStatusInternal = internalMutation({
   },
   async handler(ctx, args) {
     await ctx.db.patch(args.hostId, {
+      isVerified: args.stripePayoutsEnabled,
       stripeConnectAccountId: args.stripeConnectAccountId,
       stripeOnboardingComplete: args.stripeOnboardingComplete,
       stripeChargesEnabled: args.stripeChargesEnabled,
@@ -253,27 +830,181 @@ export const markPaymentPaidByCheckoutSessionInternal = internalMutation({
     if (payment.lastWebhookEventId === args.eventId) {
       return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt } as const;
     }
+    if (payment.status === "paid") {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, reason: "already_paid" } as const;
+    }
 
-    await ctx.db.patch(payment._id, {
-      status: "paid",
-      payoutStatus: "eligible",
+    const strategy = (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy;
+    if (strategy === "destination_manual_capture") {
+      await ctx.db.patch(payment._id, {
+        stripePaymentIntentId: args.stripePaymentIntentId ?? payment.stripePaymentIntentId,
+        stripeChargeId: args.stripeChargeId ?? payment.stripeChargeId,
+        captureStatus: "pending_capture",
+        lastWebhookEventId: args.eventId,
+        updatedAt: Date.now(),
+      });
+      await ctx.scheduler.runAt(
+        new Date(payment.releaseAt),
+        internal.stripe.capturePaymentIntentForCompletedBookingInternal,
+        { paymentId: payment._id },
+      );
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, strategy } as const;
+    }
+
+    await markPaymentAsPaidAndSchedule(ctx, payment, {
       stripePaymentIntentId: args.stripePaymentIntentId ?? payment.stripePaymentIntentId,
       stripeChargeId: args.stripeChargeId ?? payment.stripeChargeId,
-      lastWebhookEventId: args.eventId,
-      updatedAt: Date.now(),
+      eventId: args.eventId,
     });
-    await ctx.db.patch(payment.bookingId, {
-      status: "confirmed",
-      updatedAt: Date.now(),
-    });
-
-    await ctx.scheduler.runAt(
-      new Date(payment.releaseAt),
-      internal.stripePayouts.releaseHostPayoutInternal,
-      { paymentId: payment._id },
-    );
 
     return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt } as const;
+  },
+});
+
+export const markPaymentCapturedByPaymentIntentInternal = internalMutation({
+  args: {
+    stripePaymentIntentId: v.string(),
+    stripeChargeId: v.optional(v.string()),
+    eventId: v.string(),
+  },
+  async handler(ctx, args) {
+    const payment = await ctx.db
+      .query("payments")
+      .withIndex("by_payment_intent", (q) => q.eq("stripePaymentIntentId", args.stripePaymentIntentId))
+      .first();
+    if (!payment) return;
+    if (payment.lastWebhookEventId === args.eventId) return;
+    if (payment.status === "paid") return;
+    const strategy = (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy;
+    if (strategy === "destination_manual_capture") {
+      await ctx.db.patch(payment._id, {
+        status: "paid",
+        paidAt: Date.now(),
+        payoutStatus: "transferred",
+        captureStatus: "captured",
+        stripeChargeId: args.stripeChargeId ?? payment.stripeChargeId,
+        lastWebhookEventId: args.eventId,
+        updatedAt: Date.now(),
+      });
+      await ctx.db.patch(payment.bookingId, {
+        status: "completed",
+        completedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      return;
+    }
+    await markPaymentAsPaidAndSchedule(ctx, payment, {
+      stripePaymentIntentId: args.stripePaymentIntentId,
+      stripeChargeId: args.stripeChargeId ?? payment.stripeChargeId,
+      eventId: args.eventId,
+    });
+  },
+});
+
+export const markPaymentCaptureStateByIntentInternal = internalMutation({
+  args: {
+    stripePaymentIntentId: v.string(),
+    captureStatus: v.union(v.literal("pending_capture"), v.literal("capture_failed"), v.literal("expired")),
+    eventId: v.string(),
+  },
+  async handler(ctx, args) {
+    const payment = await ctx.db
+      .query("payments")
+      .withIndex("by_payment_intent", (q) => q.eq("stripePaymentIntentId", args.stripePaymentIntentId))
+      .first();
+    if (!payment) return;
+    if (payment.lastWebhookEventId === args.eventId) return;
+    const strategy = (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy;
+    if (strategy !== "destination_manual_capture") return;
+    const now = Date.now();
+    await ctx.db.patch(payment._id, {
+      captureStatus: args.captureStatus,
+      status: args.captureStatus === "pending_capture" ? payment.status : "failed",
+      payoutStatus: args.captureStatus === "pending_capture" ? payment.payoutStatus : "blocked",
+      lastWebhookEventId: args.eventId,
+      updatedAt: now,
+    });
+    if (args.captureStatus !== "pending_capture") {
+      await ctx.db.patch(payment.bookingId, {
+        status: "payment_failed",
+        updatedAt: now,
+      });
+    }
+  },
+});
+
+export const markPaymentCaptureStateByPaymentIdInternal = internalMutation({
+  args: {
+    paymentId: v.id("payments"),
+    captureStatus: v.union(v.literal("pending_capture"), v.literal("capture_failed"), v.literal("expired")),
+    eventId: v.string(),
+  },
+  async handler(ctx, args) {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) return;
+    if (payment.lastWebhookEventId === args.eventId) return;
+    const strategy = (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy;
+    if (strategy !== "destination_manual_capture") return;
+    const now = Date.now();
+    await ctx.db.patch(payment._id, {
+      captureStatus: args.captureStatus,
+      status: args.captureStatus === "pending_capture" ? payment.status : "failed",
+      payoutStatus: args.captureStatus === "pending_capture" ? payment.payoutStatus : "blocked",
+      lastWebhookEventId: args.eventId,
+      updatedAt: now,
+    });
+    if (args.captureStatus !== "pending_capture") {
+      await ctx.db.patch(payment.bookingId, {
+        status: "payment_failed",
+        updatedAt: now,
+      });
+    }
+  },
+});
+
+export const capturePaymentIntentForCompletedBookingInternal = internalAction({
+  args: {
+    paymentId: v.id("payments"),
+  },
+  async handler(ctx, args) {
+    const payment = await ctx.runQuery(internal.stripe.getPaymentForCaptureInternal, {
+      paymentId: args.paymentId,
+    });
+    if (!payment) {
+      return { captured: false, reason: "payment_not_found" } as const;
+    }
+    if ((payment.paymentStrategy ?? "platform_transfer_fallback") !== "destination_manual_capture") {
+      return { captured: false, reason: "strategy_not_destination_manual_capture" } as const;
+    }
+    if (!payment.stripePaymentIntentId) {
+      await ctx.runMutation(internal.stripe.markPaymentCaptureStateByPaymentIdInternal, {
+        paymentId: payment._id,
+        captureStatus: "capture_failed",
+        eventId: `capture-missing-intent-${String(payment._id)}`,
+      });
+      return { captured: false, reason: "missing_payment_intent" } as const;
+    }
+    try {
+      const payload = await stripeFormRequest(
+        `payment_intents/${payment.stripePaymentIntentId}/capture`,
+        new URLSearchParams(),
+        `capture-${String(payment._id)}-${String(payment.releaseAt)}`,
+      );
+      await ctx.runMutation(internal.stripe.markPaymentCapturedByPaymentIntentInternal, {
+        stripePaymentIntentId: payment.stripePaymentIntentId,
+        stripeChargeId: typeof payload.latest_charge === "string" ? payload.latest_charge : payment.stripeChargeId,
+        eventId: `manual-capture-${String(payment._id)}-${Date.now()}`,
+      });
+      return { captured: true, reason: "captured" } as const;
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : "";
+      await ctx.runMutation(internal.stripe.markPaymentCaptureStateByPaymentIdInternal, {
+        paymentId: payment._id,
+        captureStatus: message.includes("expired") ? "expired" : "capture_failed",
+        eventId: `manual-capture-failed-${String(payment._id)}-${Date.now()}`,
+      });
+      return { captured: false, reason: "capture_failed" } as const;
+    }
   },
 });
 
@@ -289,16 +1020,34 @@ export const markPaymentFailedByIntentInternal = internalMutation({
       .first();
     if (!payment) return;
     if (payment.lastWebhookEventId === args.eventId) return;
+
+    const booking = await ctx.db.get(payment.bookingId);
+    const shouldCancelReservation =
+      typeof payment.paymentDueAt === "number" &&
+      Date.now() >= payment.paymentDueAt &&
+      (payment.status === "method_saved" || payment.status === "method_collection_pending");
+    const nextBookingStatus = shouldCancelReservation ? "cancelled" : "payment_failed";
+
+    if (!shouldCancelReservation && payment.status === "method_saved") {
+      await ctx.db.patch(payment._id, {
+        lastWebhookEventId: args.eventId,
+        updatedAt: Date.now(),
+      });
+      return;
+    }
+
     await ctx.db.patch(payment._id, {
       status: "failed",
       payoutStatus: "blocked",
       lastWebhookEventId: args.eventId,
       updatedAt: Date.now(),
     });
-    await ctx.db.patch(payment.bookingId, {
-      status: "payment_failed",
-      updatedAt: Date.now(),
-    });
+    if (booking && booking.status !== "completed" && booking.status !== "cancelled") {
+      await ctx.db.patch(payment.bookingId, {
+        status: nextBookingStatus,
+        updatedAt: Date.now(),
+      });
+    }
   },
 });
 
@@ -328,6 +1077,8 @@ export const markPaymentRefundOrDisputeInternal = internalMutation({
     stripeChargeId: v.string(),
     status: v.union(v.literal("refunded"), v.literal("partially_refunded"), v.literal("disputed")),
     eventId: v.string(),
+    refundedAmountCents: v.optional(v.number()),
+    capturedAmountCents: v.optional(v.number()),
   },
   async handler(ctx, args) {
     const payment = await ctx.db
@@ -336,6 +1087,27 @@ export const markPaymentRefundOrDisputeInternal = internalMutation({
       .first();
     if (!payment) return;
     if (payment.lastWebhookEventId === args.eventId) return;
+
+    const depositAmountCents = Math.round(Number(payment.depositAmount ?? 0) * 100);
+    const refundedAmountCents =
+      typeof args.refundedAmountCents === "number" ? Math.max(0, Math.round(args.refundedAmountCents)) : null;
+    const expectedDepositRefund =
+      args.status === "partially_refunded" &&
+      depositAmountCents > 0 &&
+      refundedAmountCents !== null &&
+      refundedAmountCents <= depositAmountCents &&
+      (payment.depositStatus === "refund_pending" || payment.depositStatus === "held" || payment.depositStatus === "refunded");
+
+    if (expectedDepositRefund) {
+      await ctx.db.patch(payment._id, {
+        depositStatus: "refunded",
+        depositRefundAmount: refundedAmountCents! / 100,
+        lastWebhookEventId: args.eventId,
+        updatedAt: Date.now(),
+      });
+      return;
+    }
+
     await ctx.db.patch(payment._id, {
       status: args.status,
       payoutStatus: "blocked",
@@ -432,5 +1204,108 @@ export const getHostByStripeConnectAccountIdInternal = query({
       .query("hosts")
       .filter((q) => q.eq(q.field("stripeConnectAccountId"), args.stripeConnectAccountId))
       .first();
+  },
+});
+
+export const getPaymentForCaptureInternal = query({
+  args: {
+    paymentId: v.id("payments"),
+  },
+  async handler(ctx, args) {
+    return await ctx.db.get(args.paymentId);
+  },
+});
+
+export const getPaymentByBookingIdInternal = query({
+  args: {
+    bookingId: v.id("bookings"),
+  },
+  async handler(ctx, args) {
+    return await ctx.db
+      .query("payments")
+      .withIndex("by_booking", (q) => q.eq("bookingId", args.bookingId))
+      .first();
+  },
+});
+
+export const fetchSetupIntentPaymentMethodInternal = internalAction({
+  args: {
+    setupIntentId: v.string(),
+  },
+  async handler(_ctx, args) {
+    const payload = await stripeGetRequest(
+      `setup_intents/${encodeURIComponent(args.setupIntentId)}?expand[]=payment_method`,
+    );
+    return {
+      setupIntentId: String(payload.id),
+      customerId:
+        typeof payload.customer === "string"
+          ? String(payload.customer)
+          : typeof payload.customer?.id === "string"
+            ? String(payload.customer.id)
+            : null,
+      paymentMethodId:
+        typeof payload.payment_method === "string"
+          ? String(payload.payment_method)
+          : typeof payload.payment_method?.id === "string"
+            ? String(payload.payment_method.id)
+            : null,
+    };
+  },
+});
+
+export const backfillPaymentStrategyInternal = internalMutation({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  async handler(ctx, args) {
+    const payments = await ctx.db.query("payments").collect();
+    const max = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : payments.length;
+    let updated = 0;
+
+    for (const payment of payments.slice(0, max)) {
+      const booking = await ctx.db.get(payment.bookingId);
+      const car = await ctx.db.get(payment.carId);
+      const renter = await ctx.db.get(payment.renterId);
+      if (!booking) continue;
+
+      const patch: Record<string, unknown> = {};
+      if (!payment.paymentStrategy) patch.paymentStrategy = "platform_transfer_fallback";
+      if (!payment.captureStatus) patch.captureStatus = "not_required";
+
+      const dueAt = new Date(booking.startDate).getTime() - DAY_MS;
+      const claimWindow = new Date(booking.endDate).getTime() + DEPOSIT_CLAIM_WINDOW_MS;
+      const depositAmount = Number(car?.depositAmount ?? 0);
+
+      if (payment.paymentDueAt === undefined && Number.isFinite(dueAt)) {
+        patch.paymentDueAt = dueAt;
+      }
+      if (payment.depositAmount === undefined) {
+        patch.depositAmount = depositAmount;
+      }
+      if (payment.depositClaimWindowEndsAt === undefined && Number.isFinite(claimWindow)) {
+        patch.depositClaimWindowEndsAt = claimWindow;
+      }
+      if (payment.depositStatus === undefined) {
+        patch.depositStatus = depositAmount > 0 && payment.status === "paid" ? "held" : "not_applicable";
+      }
+      if (payment.paidAt === undefined && payment.status === "paid") {
+        patch.paidAt = payment.updatedAt ?? payment.createdAt;
+      }
+      if (payment.stripeCustomerId === undefined && renter?.stripeCustomerId) {
+        patch.stripeCustomerId = renter.stripeCustomerId;
+      }
+
+      if (Object.keys(patch).length > 0) {
+        patch.updatedAt = Date.now();
+        await ctx.db.patch(payment._id, patch as any);
+        updated += 1;
+      }
+    }
+
+    return {
+      scanned: Math.min(max, payments.length),
+      updated,
+    };
   },
 });

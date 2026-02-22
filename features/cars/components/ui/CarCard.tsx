@@ -1,5 +1,6 @@
 import { View, Image, Pressable } from "react-native";
 import { useColorScheme } from "nativewind";
+import { useTranslation } from "react-i18next";
 import { Text } from "@/components/ui/text";
 import { Link } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,15 +18,21 @@ type CarCardProps = {
       city?: string;
     };
   };
+  startDate?: string;
+  endDate?: string;
   onPress?: () => void;
   highlighted?: boolean;
 };
 
-export function CarCard({ car, onPress, highlighted = false }: CarCardProps) {
+export function CarCard({ car, startDate, endDate, onPress, highlighted = false }: CarCardProps) {
+  const { t } = useTranslation();
   const mode = resolveThemeMode(useColorScheme());
+  const href = startDate && endDate
+    ? ({ pathname: `/car/${car.id}`, params: { startDate, endDate } } as const)
+    : (`/car/${car.id}` as const);
 
   return (
-    <Link href={`/car/${car.id}`} asChild>
+    <Link href={href as any} asChild>
       <Pressable
         onPress={onPress}
         className={`bg-card rounded-xl overflow-hidden mb-4 shadow-sm border ${
@@ -65,7 +72,7 @@ export function CarCard({ car, onPress, highlighted = false }: CarCardProps) {
             <Text className="text-xl font-bold text-foreground">
               ${car.pricePerDay}
             </Text>
-            <Text className="text-sm text-muted-foreground ml-1">/day</Text>
+            <Text className="text-sm text-muted-foreground ml-1">{t("carDetail.perDay")}</Text>
           </View>
         </View>
       </Pressable>

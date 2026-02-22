@@ -1,7 +1,10 @@
 import { Tabs } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { BottomNav } from "@/components/navigation/BottomNav";
 
 export default function TabsLayout() {
+  const { t } = useTranslation();
+
   return (
     <Tabs
       screenOptions={{
@@ -11,23 +14,23 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{ title: "Explore" }}
+        options={{ title: t("bottomNav.explore") }}
       />
       <Tabs.Screen
         name="favorites"
-        options={{ title: "Favorites" }}
+        options={{ title: t("bottomNav.favorites") }}
       />
       <Tabs.Screen
         name="trips"
-        options={{ title: "Trips" }}
+        options={{ title: t("bottomNav.trips") }}
       />
       <Tabs.Screen
         name="dashboard"
-        options={{ title: "Host" }}
+        options={{ title: t("bottomNav.host") }}
       />
       <Tabs.Screen
         name="profile"
-        options={{ title: "Profile" }}
+        options={{ title: t("bottomNav.profile") }}
       />
     </Tabs>
   );

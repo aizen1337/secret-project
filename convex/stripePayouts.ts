@@ -41,12 +41,12 @@ export const markBookingCompletedAndEligibleInternal = internalMutation({
     const booking = await ctx.db.get(payment.bookingId);
     if (!booking) throw new Error("Booking not found.");
 
-    if (payment.status !== "paid") {
-      return { eligible: false, reason: "payment_not_paid" } as const;
-    }
     if (payment.status === "disputed" || payment.status === "refunded" || payment.status === "partially_refunded") {
       await ctx.db.patch(payment._id, { payoutStatus: "blocked", updatedAt: Date.now() });
       return { eligible: false, reason: "blocked_by_payment_status" } as const;
+    }
+    if (payment.status !== "paid") {
+      return { eligible: false, reason: "payment_not_paid" } as const;
     }
     if (Date.now() < payment.releaseAt) {
       return { eligible: false, reason: "release_time_not_reached" } as const;
@@ -60,7 +60,10 @@ export const markBookingCompletedAndEligibleInternal = internalMutation({
       });
     }
 
-    if (payment.payoutStatus !== "transferred") {
+    if (
+      (payment.paymentStrategy ?? "platform_transfer_fallback") === "platform_transfer_fallback" &&
+      payment.payoutStatus !== "transferred"
+    ) {
       await ctx.db.patch(payment._id, {
         payoutStatus: "eligible",
         updatedAt: Date.now(),
@@ -91,6 +94,9 @@ export const releaseHostPayoutInternal = internalAction({
     }
     if (payment.payoutStatus === "transferred") {
       return { released: true, transferId: payment.stripeTransferId };
+    }
+    if ((payment.paymentStrategy ?? "platform_transfer_fallback") !== "platform_transfer_fallback") {
+      return { released: true, reason: "not_transfer_strategy" };
     }
     if (!payment.hostStripeConnectAccountId) {
       await ctx.runMutation(internal.stripe.updatePaymentPayoutErrorInternal, {

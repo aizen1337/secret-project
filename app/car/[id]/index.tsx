@@ -1,7 +1,6 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useColorScheme } from "nativewind";
 import {
-  Alert,
   FlatList,
   Image,
   Platform,
@@ -16,19 +15,48 @@ import * as ExpoLinking from "expo-linking";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
 import { useAction, useQuery } from "convex/react";
+import { useTranslation } from "react-i18next";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useToast } from "@/components/feedback/useToast";
+import { DateRangePicker } from "@/components/filters/DateRangePicker";
 import { BottomNav } from "@/components/navigation/BottomNav";
+import { toLocalizedErrorMessage } from "@/lib/errors";
 import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function toStartOfDayIso(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0)).toISOString();
+}
+
+function toEndOfDayIso(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 23, 59, 59)).toISOString();
+}
+
+function isDateInput(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 export default function CarDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { t } = useTranslation();
+  const params = useLocalSearchParams<{ id: string; startDate?: string; endDate?: string }>();
+  const { id, startDate: startDateParam, endDate: endDateParam } = params;
   const router = useRouter();
+  const toast = useToast();
   const { width } = useWindowDimensions();
   const mode = resolveThemeMode(useColorScheme());
   const { isSignedIn } = useAuth();
+  const currentUser = useQuery(api.users.getCurrentUser);
   const carId = typeof id === "string" ? (id as Id<"cars">) : undefined;
   const offer = useQuery(api.cars.getCarOfferById, carId ? { carId } : "skip");
   const createCheckoutSession = useAction(api.stripe.createCheckoutSession);
@@ -36,7 +64,18 @@ export default function CarDetailScreen() {
   const host = offer?.host;
   const hostUser = offer?.hostUser;
 
-  const [selectedDays, setSelectedDays] = useState(3);
+  const today = useMemo(() => new Date(), []);
+  const defaultEnd = useMemo(() => {
+    const value = new Date(today);
+    value.setDate(value.getDate() + 2);
+    return value;
+  }, [today]);
+  const [selectedStartDate, setSelectedStartDate] = useState(
+    isDateInput(startDateParam) ? startDateParam : toDateInputValue(today),
+  );
+  const [selectedEndDate, setSelectedEndDate] = useState(
+    isDateInput(endDateParam) ? endDateParam : toDateInputValue(defaultEnd),
+  );
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
   const galleryRef = useRef<FlatList<string>>(null);
@@ -45,7 +84,7 @@ export default function CarDetailScreen() {
   if (!carId) {
     return (
       <SafeAreaView className="flex-1 bg-background items-center justify-center px-6">
-        <Text className="text-lg text-muted-foreground text-center">Car not found</Text>
+        <Text className="text-lg text-muted-foreground text-center">{t("carDetail.notFound")}</Text>
       </SafeAreaView>
     );
   }
@@ -53,7 +92,7 @@ export default function CarDetailScreen() {
   if (offer === undefined) {
     return (
       <SafeAreaView className="flex-1 bg-background items-center justify-center">
-        <Text className="text-base text-muted-foreground">Loading car details...</Text>
+        <Text className="text-base text-muted-foreground">{t("carDetail.loading")}</Text>
       </SafeAreaView>
     );
   }
@@ -61,15 +100,25 @@ export default function CarDetailScreen() {
   if (!car) {
     return (
       <SafeAreaView className="flex-1 bg-background items-center justify-center px-6">
-        <Text className="text-lg text-muted-foreground text-center">Car not found</Text>
+        <Text className="text-lg text-muted-foreground text-center">{t("carDetail.notFound")}</Text>
       </SafeAreaView>
     );
   }
 
+  const startIso = toStartOfDayIso(selectedStartDate);
+  const endIso = toEndOfDayIso(selectedEndDate);
+  const startTs = new Date(startIso).getTime();
+  const endTs = new Date(endIso).getTime();
+  const dateRangeValid = Number.isFinite(startTs) && Number.isFinite(endTs) && startTs <= endTs;
+  const selectedDays = dateRangeValid ? Math.max(1, Math.ceil((endTs - startTs + 1) / (24 * 60 * 60 * 1000))) : 1;
   const totalPrice = car.pricePerDay * selectedDays;
   const serviceFee = Math.round(totalPrice * 0.1);
-  const grandTotal = totalPrice + serviceFee;
-  const galleryImages = car.images.length > 0 ? car.images : [""];
+  const depositAmount = Number(car.depositAmount ?? 0);
+  const grandTotal = totalPrice + serviceFee + depositAmount;
+  const paymentDueAt = new Date(startTs - 24 * 60 * 60 * 1000);
+  const paymentDueLabel = dateRangeValid ? paymentDueAt.toLocaleString() : "-";
+  const carImages = Array.isArray(car.images) ? (car.images as string[]) : [];
+  const galleryImages: string[] = carImages.length > 0 ? carImages : [""];
   const sideImages = galleryImages
     .map((image, index) => ({ image, index }))
     .filter((item) => item.index !== activeImageIndex)
@@ -84,10 +133,24 @@ export default function CarDetailScreen() {
         year: "numeric",
       })
     : null;
+  const isOwnListing = Boolean(
+    currentUser?._id &&
+      host?.userId &&
+      String(currentUser._id) === String(host.userId),
+  );
+  const isBookDisabled = isCreatingCheckout || !dateRangeValid || isOwnListing;
 
   const handleBook = async () => {
+    if (isOwnListing) {
+      toast.error(t("carDetail.cannotBookOwnListing"));
+      return;
+    }
     if (!isSignedIn) {
       router.push("/sign-in");
+      return;
+    }
+    if (!dateRangeValid) {
+      toast.error(t("carDetail.invalidDateRange"));
       return;
     }
 
@@ -103,13 +166,10 @@ export default function CarDetailScreen() {
 
       const checkout = await createCheckoutSession({
         carId: car._id,
-        carName: `${car.make} ${car.model}`,
-        pricePerDay: car.pricePerDay,
-        days: selectedDays,
         successUrl,
         cancelUrl,
-        startDate: new Date().toISOString(),
-        endDate: new Date(Date.now() + (selectedDays - 1) * 24 * 60 * 60 * 1000).toISOString(),
+        startDate: startIso,
+        endDate: endIso,
       });
 
       if (isWeb && typeof window !== "undefined") {
@@ -119,8 +179,17 @@ export default function CarDetailScreen() {
 
       await ExpoLinking.openURL(checkout.url);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to open checkout.";
-      Alert.alert("Checkout Error", message);
+      const raw = error instanceof Error ? error.message : "";
+      if (
+        raw.startsWith("UNVERIFIED_RENTER:") ||
+        raw.startsWith("VERIFICATION_PENDING:") ||
+        raw.startsWith("VERIFICATION_REJECTED:")
+      ) {
+        toast.error(toLocalizedErrorMessage(error, t, "apiErrors.default"));
+        router.push("/profile");
+      } else {
+        toast.error(toLocalizedErrorMessage(error, t, "carDetail.checkoutFailed"));
+      }
     } finally {
       setIsCreatingCheckout(false);
     }
@@ -178,7 +247,7 @@ export default function CarDetailScreen() {
                                   style={{ backgroundColor: getTokenColor(mode, "overlay") }}
                                 >
                                   <Text className="text-primary-foreground font-semibold text-sm">
-                                    +{extraPhotosCount} photos
+                                    {t("carDetail.photosMore", { count: extraPhotosCount })}
                                   </Text>
                                 </View>
                               ) : null}
@@ -197,7 +266,7 @@ export default function CarDetailScreen() {
           ) : (
             <FlatList
               ref={galleryRef}
-              data={car.images}
+              data={galleryImages}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
@@ -222,9 +291,9 @@ export default function CarDetailScreen() {
           >
             <Ionicons name="chevron-back" size={20} color={getTokenColor(mode, "primaryForeground")} />
           </Pressable>
-          {!isWeb && car.images.length > 1 ? (
+          {!isWeb && galleryImages.length > 1 ? (
             <View className="absolute bottom-4 left-0 right-0 flex-row justify-center gap-2">
-              {car.images.map((_, index) => (
+              {galleryImages.map((_, index) => (
                 <View
                   key={`dot-${index}`}
                   className={`h-2 rounded-full ${index === activeImageIndex ? "w-5" : "w-2"}`}
@@ -240,14 +309,14 @@ export default function CarDetailScreen() {
           ) : null}
         </View>
 
-        {!isWeb && car.images.length > 1 ? (
+        {!isWeb && galleryImages.length > 1 ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             className="px-4 pt-3"
             contentContainerStyle={{ gap: 10 }}
           >
-            {car.images.map((image, index) => (
+            {galleryImages.map((image, index) => (
               <Pressable
                 key={`${image}-${index}`}
                 onPress={() => {
@@ -273,7 +342,7 @@ export default function CarDetailScreen() {
                 </Text>
                 {car.isCarVerified ? (
                   <View className="ml-2 mt-1 px-2 py-1 bg-verified-bg rounded-full">
-                    <Text className="text-[10px] font-semibold text-verified-fg">CAR VERIFIED</Text>
+                    <Text className="text-[10px] font-semibold text-verified-fg">{t("carDetail.verifiedCar")}</Text>
                   </View>
                 ) : null}
               </View>
@@ -284,7 +353,7 @@ export default function CarDetailScreen() {
             <View className="flex-row items-center">
               <Ionicons name="star" size={16} color={getTokenColor(mode, "ratingStar")} />
               <Text className="text-base font-semibold text-foreground ml-1">5.0</Text>
-              <Text className="text-sm text-muted-foreground ml-1">(New)</Text>
+              <Text className="text-sm text-muted-foreground ml-1">{t("carDetail.ratingNew")}</Text>
             </View>
           </View>
 
@@ -295,9 +364,9 @@ export default function CarDetailScreen() {
             </Text>
           </View>
 
-          <Text className="text-lg font-semibold text-foreground mb-3">Features</Text>
+          <Text className="text-lg font-semibold text-foreground mb-3">{t("carDetail.features")}</Text>
           <View className="flex-row flex-wrap gap-2 mb-6">
-            {(displayFeatures.length ? displayFeatures : ["Automatic", "Air Conditioning", "Bluetooth"]).map(
+            {(displayFeatures.length ? displayFeatures : []).map(
               (feature) => (
                 <View key={feature} className="bg-secondary px-3 py-2 rounded-full">
                   <Text className="text-sm text-foreground">{feature}</Text>
@@ -306,21 +375,21 @@ export default function CarDetailScreen() {
             )}
           </View>
 
-          <Text className="text-lg font-semibold text-foreground mb-3">Pickup</Text>
+          <Text className="text-lg font-semibold text-foreground mb-3">{t("carDetail.pickup")}</Text>
           <View className="bg-card p-4 rounded-xl border border-border mb-6">
             {car.formattedAddress ? (
               <>
-                <Text className="text-sm text-muted-foreground mb-1">Address</Text>
+                <Text className="text-sm text-muted-foreground mb-1">{t("carDetail.address")}</Text>
                 <Text className="text-base font-medium text-foreground">{car.formattedAddress}</Text>
               </>
             ) : null}
-            <Text className="text-sm text-muted-foreground mb-1">City</Text>
+            <Text className="text-sm text-muted-foreground mb-1">{t("carDetail.city")}</Text>
             <Text className="text-base font-medium text-foreground">{car.location.city}</Text>
-            <Text className="text-sm text-muted-foreground mt-3 mb-1">Country</Text>
+            <Text className="text-sm text-muted-foreground mt-3 mb-1">{t("carDetail.country")}</Text>
             <Text className="text-base font-medium text-foreground">{car.location.country}</Text>
           </View>
 
-          <Text className="text-lg font-semibold text-foreground mb-3">Host</Text>
+          <Text className="text-lg font-semibold text-foreground mb-3">{t("carDetail.host")}</Text>
           <View className="bg-card p-4 rounded-xl border border-border mb-6">
             <View className="flex-row items-center">
               {hostUser?.imageUrl ? (
@@ -337,59 +406,101 @@ export default function CarDetailScreen() {
               <View className="ml-3 flex-1">
                 <View className="flex-row items-center">
                   <Text className="text-base font-semibold text-foreground">
-                    Hosted by {hostUser?.name ?? "Host"}
+                    {t("carDetail.hostedBy", { name: hostUser?.name ?? t("carDetail.host") })}
                   </Text>
                   {host?.isVerified ? (
                     <View className="ml-2 px-2 py-1 bg-verified-bg rounded-full">
-                      <Text className="text-[10px] font-semibold text-verified-fg">VERIFIED</Text>
+                      <Text className="text-[10px] font-semibold text-verified-fg">{t("carDetail.verifiedHost")}</Text>
                     </View>
                   ) : null}
                 </View>
                 <Text className="text-xs text-muted-foreground mt-1">
-                  {hostMemberSince ? `Member since ${hostMemberSince}` : "Host account"}
+                  {hostMemberSince ? t("carDetail.memberSince", { date: hostMemberSince }) : t("carDetail.hostAccount")}
                 </Text>
               </View>
             </View>
             <Text className="text-sm text-muted-foreground mt-3">
-              {host?.bio || "Friendly host ready to help you enjoy a smooth trip."}
+              {host?.bio || t("carDetail.hostBioFallback")}
             </Text>
+          </View>
+
+          <Text className="text-lg font-semibold text-foreground mb-3">{t("carDetail.rules.title")}</Text>
+          <View className="bg-card p-4 rounded-xl border border-border mb-6 gap-2">
+            {typeof car.kilometersLimitPerDay === "number" ? (
+              <Text className="text-sm text-muted-foreground">
+                {t("carDetail.rules.kmLimit", { value: car.kilometersLimitPerDay })}
+              </Text>
+            ) : null}
+            {typeof car.depositAmount === "number" ? (
+              <Text className="text-sm text-muted-foreground">
+                {t("carDetail.rules.deposit", { value: car.depositAmount })}
+              </Text>
+            ) : null}
+            {car.fuelPolicy ? (
+              <Text className="text-sm text-muted-foreground">
+                {t("carDetail.rules.fuelPolicy", {
+                  value: t(`carDetail.rules.fuelPolicies.${car.fuelPolicy}`),
+                })}
+              </Text>
+            ) : null}
+            {car.fuelPolicyNote ? (
+              <Text className="text-sm text-muted-foreground">
+                {t("carDetail.rules.fuelNote", { value: car.fuelPolicyNote })}
+              </Text>
+            ) : null}
           </View>
         </View>
       </ScrollView>
 
       <View className="px-4 py-4 border-t border-border bg-card">
-        <View className="flex-row justify-between items-center mb-4">
+        <View className="mb-3">
+          <DateRangePicker
+            startDate={selectedStartDate}
+            endDate={selectedEndDate}
+            onApply={(nextStart, nextEnd) => {
+              setSelectedStartDate(nextStart);
+              setSelectedEndDate(nextEnd);
+            }}
+          />
+        </View>
+        <View className="flex-row justify-between items-start mb-4">
           <View>
             <View className="flex-row items-baseline">
               <Text className="text-2xl font-bold text-foreground">${car.pricePerDay}</Text>
-              <Text className="text-base text-muted-foreground ml-1">/day</Text>
+              <Text className="text-base text-muted-foreground ml-1">{t("carDetail.perDay")}</Text>
             </View>
             <Text className="text-sm text-muted-foreground">
-              ${grandTotal} total ({selectedDays} days + fees)
+              {t("carDetail.totalWithFees", { total: grandTotal, days: selectedDays })}
             </Text>
+            <Text className="text-xs text-muted-foreground mt-1">
+              {t("carDetail.paymentDueBy", { date: paymentDueLabel })}
+            </Text>
+            {depositAmount > 0 ? (
+              <Text className="text-xs text-muted-foreground mt-1">
+                {t("carDetail.depositIncluded", { value: depositAmount })}
+              </Text>
+            ) : null}
           </View>
 
-          <View className="flex-row items-center bg-secondary rounded-xl">
-            <Pressable
-              onPress={() => setSelectedDays(Math.max(1, selectedDays - 1))}
-              className="px-4 py-3"
-            >
-              <Ionicons name="remove" size={20} color={getTokenColor(mode, "iconMuted")} />
-            </Pressable>
-            <Text className="text-base font-semibold text-foreground px-2">{selectedDays} days</Text>
-            <Pressable onPress={() => setSelectedDays(selectedDays + 1)} className="px-4 py-3">
-              <Ionicons name="add" size={20} color={getTokenColor(mode, "iconMuted")} />
-            </Pressable>
+          <View className="items-end">
+            <Text className="text-sm font-semibold text-foreground">{t("carDetail.days", { count: selectedDays })}</Text>
+            <Text className="text-xs text-muted-foreground mt-1">
+              {t("carDetail.selectedDates", { start: selectedStartDate, end: selectedEndDate })}
+            </Text>
           </View>
         </View>
 
         <Pressable
           onPress={handleBook}
-          disabled={isCreatingCheckout}
-          className={`py-4 rounded-xl items-center ${isCreatingCheckout ? "bg-primary/60" : "bg-primary"}`}
+          disabled={isBookDisabled}
+          className={`py-4 rounded-xl items-center ${isBookDisabled ? "bg-primary/60" : "bg-primary"}`}
         >
           <Text className="text-primary-foreground font-semibold text-base">
-            {isCreatingCheckout ? "Redirecting..." : "Book Now"}
+            {isOwnListing
+              ? t("carDetail.ownListing")
+              : isCreatingCheckout
+                ? t("carDetail.redirecting")
+                : t("carDetail.reserveNow")}
           </Text>
         </Pressable>
       </View>

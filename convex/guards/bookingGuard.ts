@@ -11,17 +11,17 @@ export async function assertCarIsBookable(
   { startDate, endDate }: DateRange
 ) {
   const car = await ctx.db.get(carId);
-  if (!car || !car.isPublished) {
+  if (!car || !car.isActive) {
     throw new Error("Car not available");
   }
 
   const overlappingBookings = await ctx.db
     .query("bookings")
-    .withIndex("by_car", q => q.eq("carId", carId))
-    .filter(q =>
+    .withIndex("by_car", (q: any) => q.eq("carId", carId))
+    .filter((q: any) =>
       q.and(
         q.or(
-          q.eq(q.field("status"), "pending"),
+          q.eq(q.field("status"), "payment_pending"),
           q.eq(q.field("status"), "confirmed")
         ),
         q.lte(q.field("startDate"), endDate),

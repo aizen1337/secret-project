@@ -1,9 +1,12 @@
-import { View, Text, SafeAreaView } from "react-native";
+import { View, Text } from "react-native";
 import { useColorScheme } from "nativewind";
+import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 export default function FavoritesScreen() {
+  const { t } = useTranslation();
   const mode = resolveThemeMode(useColorScheme());
 
   return (
@@ -13,10 +16,10 @@ export default function FavoritesScreen() {
           <Ionicons name="heart-outline" size={40} color={getTokenColor(mode, "iconMuted")} />
         </View>
         <Text className="text-xl font-semibold text-foreground mb-2 text-center">
-          No favorites yet
+          {t("favorites.emptyTitle")}
         </Text>
         <Text className="text-base text-muted-foreground text-center">
-          Tap the heart on any car to save it here for easy access later.
+          {t("favorites.emptySubtitle")}
         </Text>
       </View>
     </SafeAreaView>

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { action, internalAction, internalMutation } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { ActionCache } from "@convex-dev/action-cache";
+import { components, internal } from "./_generated/api";
 import { mapHost } from "./hostMapper";
 
 type StripeAccountResponse = {
@@ -51,6 +52,12 @@ async function stripeGet(path: string) {
   return payload;
 }
 
+const stripeAccountCache = new ActionCache(components.actionCache, {
+  action: internal.stripeConnect.getStripeAccountUncached,
+  name: "stripe-account-v1",
+  ttl: 60 * 1000,
+});
+
 async function ensureHostConnectAccount(ctx: any) {
   const host = await ctx.runMutation(internal.stripeConnect.ensureHostInternal, {});
   if (host.stripeConnectAccountId) {
@@ -97,10 +104,10 @@ export const createHostOnboardingLink = action({
 
     const refreshUrl =
       process.env.STRIPE_CONNECT_REFRESH_URL ??
-      "http://localhost:8081/profile?connect=refresh";
+      "http://localhost:8081/profile/payments?connect=refresh";
     const returnUrl =
       process.env.STRIPE_CONNECT_RETURN_URL ??
-      "http://localhost:8081/profile?connect=return";
+      "http://localhost:8081/profile/payments?connect=return";
 
     const accountLink = await stripeFormRequest(
       "account_links",
@@ -149,9 +156,9 @@ export const refreshHostConnectStatusInternal = internalAction({
     stripeConnectAccountId: v.string(),
   },
   async handler(ctx, args) {
-    const account = (await stripeGet(
-      `accounts/${args.stripeConnectAccountId}`,
-    )) as StripeAccountResponse;
+    const account = (await stripeAccountCache.fetch(ctx, {
+      stripeConnectAccountId: args.stripeConnectAccountId,
+    })) as StripeAccountResponse;
 
     const onboardingComplete = Boolean(account.details_submitted);
     const chargesEnabled = Boolean(account.charges_enabled);
@@ -172,5 +179,48 @@ export const refreshHostConnectStatusInternal = internalAction({
       payoutsEnabled,
       stripeConnectAccountId: args.stripeConnectAccountId,
     };
+  },
+});
+
+export const getStripeAccountUncached = internalAction({
+  args: {
+    stripeConnectAccountId: v.string(),
+  },
+  async handler(_, args): Promise<StripeAccountResponse> {
+    return (await stripeGet(`accounts/${args.stripeConnectAccountId}`)) as StripeAccountResponse;
+  },
+});
+
+export const resyncAllHostsFromStripeInternal = internalAction({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  async handler(ctx, args) {
+    const hosts = await ctx.db.query("hosts").collect();
+    const max = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : hosts.length;
+    let processed = 0;
+    let updated = 0;
+
+    for (const host of hosts) {
+      if (processed >= max) break;
+      if (!host.stripeConnectAccountId) continue;
+
+      const account = (await stripeAccountCache.fetch(ctx, {
+        stripeConnectAccountId: host.stripeConnectAccountId,
+      })) as StripeAccountResponse;
+
+      await ctx.runMutation(internal.stripe.updateHostStripeStatusInternal, {
+        hostId: host._id,
+        stripeConnectAccountId: host.stripeConnectAccountId,
+        stripeOnboardingComplete: Boolean(account.details_submitted),
+        stripeChargesEnabled: Boolean(account.charges_enabled),
+        stripePayoutsEnabled: Boolean(account.payouts_enabled),
+      });
+
+      processed += 1;
+      updated += 1;
+    }
+
+    return { processed, updated, scanned: hosts.length };
   },
 });

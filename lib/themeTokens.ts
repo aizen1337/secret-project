@@ -75,7 +75,7 @@ const TOKENS: Record<ThemeMode, Record<AppColorToken, string>> = {
     verifiedBg: "hsl(142 76% 95%)",
     verifiedFg: "hsl(142 72% 29%)",
     calendarRange: "hsl(214 32% 91%)",
-    calendarRangeDark: "rgba(30,41,59,0.6)",
+    calendarRangeDark: "hsl(146 52% 22%)",
   },
   dark: {
     background: "hsl(0 0% 9%)",
@@ -98,8 +98,8 @@ const TOKENS: Record<ThemeMode, Record<AppColorToken, string>> = {
     input: "hsl(0 0% 20%)",
     ring: "hsl(146 63% 45%)",
     placeholder: "hsl(0 0% 64%)",
-    icon: "hsl(146 63% 45%)",
-    iconMuted: "hsl(146 45% 34%)",
+    icon: "hsl(0 0% 98%)",
+    iconMuted: "hsl(0 0% 64%)",
     overlay: "rgba(0, 0, 0, 0.55)",
     surfaceSubtle: "hsl(0 0% 15%)",
     mapMarkerBg: "hsl(0 0% 11%)",
@@ -113,7 +113,7 @@ const TOKENS: Record<ThemeMode, Record<AppColorToken, string>> = {
     verifiedBg: "hsl(142 40% 24%)",
     verifiedFg: "hsl(142 65% 80%)",
     calendarRange: "hsl(214 32% 91%)",
-    calendarRangeDark: "rgba(30,41,59,0.6)",
+    calendarRangeDark: "hsl(146 52% 22%)",
   },
 };
 

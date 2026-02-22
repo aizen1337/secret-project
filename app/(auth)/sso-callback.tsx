@@ -2,10 +2,12 @@ import { useAuth, useClerk } from '@clerk/clerk-expo'
 import { Redirect } from 'expo-router'
 import * as React from 'react'
 import { Platform, View } from 'react-native'
+import { useTranslation } from 'react-i18next'
 
 import { Text } from '@/components/ui/text'
 
 export default function SsoCallback() {
+  const { t } = useTranslation()
   const { isLoaded, isSignedIn } = useAuth()
   const clerk = useClerk()
   const [callbackError, setCallbackError] = React.useState(false)
@@ -34,7 +36,7 @@ export default function SsoCallback() {
     return (
       <View className="flex-1 bg-background items-center justify-center px-6">
         <Text className="text-base text-muted-foreground">
-          Completing sign in...
+          {t('auth.signIn.completing')}
         </Text>
       </View>
     )
@@ -48,8 +50,8 @@ export default function SsoCallback() {
     <View className="flex-1 bg-background items-center justify-center px-6">
       <Text className="text-base text-muted-foreground text-center">
         {callbackError
-          ? 'Sign in was not completed. Please try again.'
-          : 'Completing sign in...'}
+          ? t('auth.signIn.callbackFailed')
+          : t('auth.signIn.completing')}
       </Text>
     </View>
   )

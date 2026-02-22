@@ -2,6 +2,7 @@ import { View, Pressable } from "react-native";
 import { useColorScheme } from "nativewind";
 import { Link, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { Text } from "@/components/ui/text";
 import { useAuth } from "@clerk/clerk-expo";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
@@ -10,30 +11,32 @@ import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 type NavItem = {
   href: string;
-  label: string;
+  labelKey: string;
   icon: keyof typeof Ionicons.glyphMap;
 };
 
 const signedOutItems: NavItem[] = [
-  { href: "/", label: "Explore", icon: "search" },
-  { href: "/sign-in", label: "Sign in", icon: "log-in-outline" },
+  { href: "/", labelKey: "bottomNav.explore", icon: "search" },
+  { href: "/sign-in", labelKey: "common.actions.signIn", icon: "log-in-outline" },
 ];
 
 const signedInItems: NavItem[] = [
-  { href: "/", label: "Explore", icon: "search" },
-  { href: "/favorites", label: "Favorites", icon: "heart-outline" },
-  { href: "/trips", label: "Trips", icon: "car-outline" },
-  { href: "/dashboard", label: "Host", icon: "grid-outline" },
-  { href: "/profile", label: "Profile", icon: "person-outline" },
+  { href: "/", labelKey: "bottomNav.explore", icon: "search" },
+  { href: "/favorites", labelKey: "bottomNav.favorites", icon: "heart-outline" },
+  { href: "/trips", labelKey: "bottomNav.trips", icon: "car-outline" },
+  { href: "/dashboard", labelKey: "bottomNav.host", icon: "grid-outline" },
+  { href: "/profile", labelKey: "bottomNav.profile", icon: "person-outline" },
 ];
 
 export function BottomNav(_: Partial<BottomTabBarProps> = {}) {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const { isLoaded, isSignedIn } = useAuth();
   const mode = resolveThemeMode(useColorScheme());
   const insets = useSafeAreaInsets();
   const items = !isLoaded || !isSignedIn ? signedOutItems : signedInItems;
-  const activeColor = getTokenColor(mode, "primary");
+  const activeColor =
+    mode === "dark" ? getTokenColor(mode, "icon") : getTokenColor(mode, "primary");
   const inactiveColor = getTokenColor(mode, "iconMuted");
 
   return (
@@ -53,7 +56,7 @@ export function BottomNav(_: Partial<BottomTabBarProps> = {}) {
               <Pressable className="items-center">
                 <Ionicons name={item.icon} size={20} color={color} />
                 <Text className="text-xs mt-1" style={{ color }}>
-                  {item.label}
+                  {t(item.labelKey)}
                 </Text>
               </Pressable>
             </Link>
