@@ -4,8 +4,7 @@ import { useState } from "react";
 import { ScrollView, View, Text, Pressable } from "react-native";
 import { useColorScheme } from "nativewind";
 import { Ionicons } from "@expo/vector-icons";
-import { Link, useRouter } from "expo-router";
-import { useAuth } from "@clerk/clerk-expo";
+import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -22,37 +21,12 @@ export default function ProfileSettingsScreen() {
   const { t } = useTranslation();
   const toast = useToast();
   const router = useRouter();
-  const mode = resolveThemeMode(useColorScheme());
-  const { isLoaded, isSignedIn } = useAuth();
+  const colorSchemeState = useColorScheme();
+  const mode = resolveThemeMode(colorSchemeState);
   const { language, setLanguage } = useAppLanguage();
   const [themePreference, setThemePreference] = useState<ThemePreference>(
     getStoredThemePreference(),
   );
-
-  if (!isLoaded) {
-    return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-base text-muted-foreground">{t("common.loading")}</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!isSignedIn) {
-    return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-base text-muted-foreground text-center mb-4">{t("profile.logInSubtitle")}</Text>
-          <Link href="/sign-in" asChild>
-            <Pressable className="bg-primary px-6 py-3 rounded-xl">
-              <Text className="text-primary-foreground font-semibold text-base">{t("common.actions.signIn")}</Text>
-            </Pressable>
-          </Link>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -78,6 +52,7 @@ export default function ProfileSettingsScreen() {
                   key={option.value}
                   onPress={() => {
                     const value = option.value as ThemePreference;
+                    colorSchemeState.setColorScheme?.(value as any);
                     setThemePreference(value);
                     setStoredThemePreference(value);
                   }}

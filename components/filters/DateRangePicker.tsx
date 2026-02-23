@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Pressable, View } from "react-native";
 
 import { Text } from "@/components/ui/text";
-import { getThemePalette, getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
+import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 import { DateRangeModal } from "@/components/filters/date-range-picker/DateRangeModal";
 import {
   buildCalendarDays,
@@ -41,7 +41,7 @@ export function DateRangePicker({
   const edgeFillColor = getTokenColor(mode, "primary");
   const rangeFillColor = edgeFillColor;
   const rangeTextColor = getTokenColor(mode, "primaryForeground");
-  const strongIconColor = getThemePalette(mode).foreground;
+  const strongIconColor = getTokenColor(mode, "icon");
 
   const open = () => {
     setDraftStart(startDate);

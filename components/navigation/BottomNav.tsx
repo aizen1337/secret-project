@@ -1,4 +1,4 @@
-import { View, Pressable } from "react-native";
+import { View, Pressable, useWindowDimensions } from "react-native";
 import { useColorScheme } from "nativewind";
 import { Link, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -33,29 +33,46 @@ export function BottomNav(_: Partial<BottomTabBarProps> = {}) {
   const pathname = usePathname();
   const { isLoaded, isSignedIn } = useAuth();
   const mode = resolveThemeMode(useColorScheme());
+  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const isMobile = width < 768;
   const items = !isLoaded || !isSignedIn ? signedOutItems : signedInItems;
-  const activeColor =
-    mode === "dark" ? getTokenColor(mode, "icon") : getTokenColor(mode, "primary");
+  const activeColor = getTokenColor(mode, "primary");
   const inactiveColor = getTokenColor(mode, "iconMuted");
+  const inactiveLabelColor = getTokenColor(mode, "mutedForeground");
+  const iconSize = isMobile ? 24 : 20;
 
   return (
     <View className="bg-card border-t border-border">
       <View
         className="flex-row items-center justify-around px-4 pt-2"
-        style={{ paddingBottom: Math.max(insets.bottom, 8) }}
+        style={{
+          paddingBottom: Math.max(insets.bottom, isMobile ? 12 : 8),
+          minHeight: isMobile ? 72 : 56,
+        }}
       >
         {items.map((item) => {
           const isActive =
             item.href === "/"
-              ? pathname === "/" || pathname === "/index"
+              ? pathname === "/" || pathname === "/index" || pathname === "/search"
               : pathname === item.href;
           const color = isActive ? activeColor : inactiveColor;
           return (
             <Link key={item.href} href={item.href} asChild>
-              <Pressable className="items-center">
-                <Ionicons name={item.icon} size={20} color={color} />
-                <Text className="text-xs mt-1" style={{ color }}>
+              <Pressable
+                className={`items-center rounded-xl border px-2 ${
+                  isActive ? "border-border bg-secondary" : "border-transparent bg-transparent"
+                }`}
+                style={{
+                  width: isMobile ? 74 : 64,
+                  paddingVertical: isMobile ? 6 : 4,
+                }}
+              >
+                <Ionicons name={item.icon} size={iconSize} color={color} />
+                <Text
+                  className={`mt-1 ${isMobile ? "text-[10px]" : "text-xs"}`}
+                  style={{ color: isActive ? activeColor : inactiveLabelColor }}
+                >
                   {t(item.labelKey)}
                 </Text>
               </Pressable>

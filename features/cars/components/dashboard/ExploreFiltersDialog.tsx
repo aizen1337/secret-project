@@ -57,7 +57,11 @@ export function ExploreFiltersDialog({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View className="flex-1 items-center justify-center px-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+      <View
+        className="flex-1 items-center justify-center px-4"
+        style={{ backgroundColor: getTokenColor(mode, "overlay") }}
+      >
+        <Pressable className="absolute inset-0" onPress={onClose} />
         <View className="max-h-[90%] w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card">
           <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
             <Text className="text-lg font-semibold text-foreground">{t("explore.filters.title")}</Text>

@@ -93,6 +93,66 @@ export const pl = {
       continueFacebook: 'Kontynuuj z Facebook',
     },
   },
+  onboarding: {
+    title: 'Konfiguracja konta',
+    subtitle: 'Wybierz, jak chcesz korzystac z aplikacji i ukoncz aktywacje, kiedy bedziesz gotowy.',
+    steps: {
+      role: 'Krok 1 z 2 - Rola',
+      activation: 'Krok 2 z 2 - Aktywacja',
+    },
+    role: {
+      title: 'Jak chcesz korzystac z aplikacji?',
+      subtitle: 'Mozesz to zmienic pozniej.',
+      options: {
+        renter: {
+          label: 'Najemca',
+          description: 'Rezerwuj auta od gospodarzy i zarzadzaj podrozami.',
+        },
+        host: {
+          label: 'Gospodarz',
+          description: 'Dodawaj swoje auto i odbieraj wyplaty za rezerwacje.',
+        },
+        both: {
+          label: 'Obie role',
+          description: 'Korzystaj z funkcji najemcy i gospodarza na jednym koncie.',
+        },
+      },
+    },
+    activation: {
+      title: 'Lista aktywacji',
+      subtitle: 'Ukoncz kroki teraz albo pomin i kontynuuj jako niezweryfikowany uzytkownik.',
+      status: {
+        ready: 'Gotowe',
+        pending: 'W toku',
+      },
+      renter: {
+        title: 'Aktywacja najemcy',
+        required: 'Wymagane: ukoncz weryfikacje prawa jazdy.',
+        enabled: 'Weryfikacja najemcy jest aktywna dla rezerwacji.',
+        disabled: 'Weryfikacja najemcy jest obecnie wylaczona. Mozesz kontynuowac.',
+      },
+      host: {
+        title: 'Aktywacja gospodarza',
+        required: 'Wymagane: skonfiguruj wyplaty dla roli gospodarza.',
+        connectExists: 'Konto Connect juz istnieje. Dokoncz konfiguracje, aby wlaczyc wyplaty.',
+        connectMissing: 'Brak konta Connect. Rozpocznij konfiguracje, aby aktywowac gospodarza.',
+      },
+      readyToFinish: 'Wszystkie wymagane kroki aktywacji sa ukonczone.',
+      canSkip: 'Mozesz to pominac i kontynuowac jako niezweryfikowany uzytkownik.',
+    },
+    actions: {
+      finish: 'Zakoncz aktywacje',
+      continueUnverified: 'Kontynuuj bez pelnej weryfikacji',
+      skipForNow: 'Pomin na teraz',
+    },
+    messages: {
+      refreshing: 'Odswiezanie statusu aktywacji...',
+      verificationRefreshed: 'Status weryfikacji najemcy zostal odswiezony.',
+      verificationRefreshFailed: 'Nie udalo sie odswiezyc statusu weryfikacji najemcy.',
+      connectRefreshed: 'Status wyplat gospodarza zostal odswiezony.',
+      connectRefreshFailed: 'Nie udalo sie odswiezyc statusu wyplat gospodarza.',
+    },
+  },
   dashboard: {
     title: 'Panel',
     role: 'Gospodarz',
@@ -152,6 +212,12 @@ export const pl = {
       host: 'Gospodarz',
       verified: 'Zweryfikowany',
       pending: 'W toku',
+    },
+    activationSetup: {
+      title: 'Konfiguracja aktywacji',
+      inProgressSubtitle: 'Ukoncz kroki aktywacji swojej roli, aby odblokowac pelna gotowosc.',
+      skippedSubtitle: 'Aktywacja zostala pominieta. Mozesz dokonczyc konfiguracje w dowolnym momencie.',
+      cta: 'Kontynuuj konfiguracje',
     },
     payouts: {
       title: 'Wyplaty',
@@ -225,6 +291,10 @@ export const pl = {
     noCarsFiltered: 'Brak aut dla aktualnych filtrow.',
     searchLocationPlaceholder: 'Szukaj lokalizacji na mapie...',
     searchGo: 'Szukaj',
+    searchOffers: 'Szukaj ofert',
+    searchingLocations: 'Wyszukiwanie lokalizacji...',
+    locationRequired: 'Lokalizacja jest wymagana.',
+    locationSelectSuggestion: 'Wybierz lokalizacje z listy podpowiedzi.',
     locationNotFound: 'Nie znaleziono lokalizacji.',
     locationSearchFailed: 'Wyszukiwanie lokalizacji nie powiodlo sie.',
     makePlaceholder: 'Marka (np. BMW)',

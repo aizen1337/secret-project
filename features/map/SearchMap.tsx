@@ -25,6 +25,7 @@ export type SearchMapProps = {
   onPress?: () => void;
   containerClassName?: string;
   interactive?: boolean;
+  fitToCars?: boolean;
   selectedCarId?: string | null;
   onMarkerPress?: (carId: string) => void;
   onOfferPress?: (carId: string) => void;

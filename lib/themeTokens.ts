@@ -1,3 +1,5 @@
+import { Appearance } from "react-native";
+
 export type ThemeMode = "light" | "dark";
 
 export type AppColorToken =
@@ -61,7 +63,7 @@ const TOKENS: Record<ThemeMode, Record<AppColorToken, string>> = {
     ring: "hsl(146 63% 45%)",
     placeholder: "hsl(0 0% 45%)",
     icon: "hsl(0 0% 9%)",
-    iconMuted: "hsl(0 0% 45%)",
+    iconMuted: "hsl(0 0% 35%)",
     overlay: "rgba(0, 0, 0, 0.45)",
     surfaceSubtle: "hsl(210 20% 96%)",
     mapMarkerBg: "hsl(0 0% 100%)",
@@ -156,6 +158,14 @@ const CSS_VAR_BY_TOKEN: Record<AppColorToken, string> = {
   calendarRangeDark: "--calendar-range-dark",
 };
 
+export function getThemeCssVariables(mode: ThemeMode): Record<string, string> {
+  const palette = TOKENS[mode];
+  const entries = Object.entries(CSS_VAR_BY_TOKEN).map(([token, cssVar]) => {
+    return [cssVar, palette[token as AppColorToken]];
+  });
+  return Object.fromEntries(entries);
+}
+
 export function resolveThemeMode(
   scheme:
     | string
@@ -173,6 +183,9 @@ export function resolveThemeMode(
     typeof scheme === "object" && scheme !== null
       ? scheme.colorScheme
       : scheme;
+  if (value === "system" || value == null) {
+    return Appearance.getColorScheme() === "dark" ? "dark" : "light";
+  }
   return value === "dark" ? "dark" : "light";
 }
 

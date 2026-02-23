@@ -10,10 +10,22 @@ import type { SearchMapProps } from "./SearchMap";
 function FitToCars({
   cars,
   region,
-}: Pick<SearchMapProps, "cars" | "region">) {
+  fitToCars,
+}: Pick<SearchMapProps, "cars" | "region" | "fitToCars">) {
   const map = useMap();
 
   useEffect(() => {
+    if (!fitToCars) {
+      const latHalf = region.latitudeDelta / 2;
+      const lngHalf = region.longitudeDelta / 2;
+      const regionBounds = L.latLngBounds(
+        [region.latitude - latHalf, region.longitude - lngHalf],
+        [region.latitude + latHalf, region.longitude + lngHalf],
+      );
+      map.fitBounds(regionBounds, { padding: [12, 12], animate: false });
+      return;
+    }
+
     if (!cars.length) {
       map.setView([region.latitude, region.longitude], 10);
       return;
@@ -23,7 +35,7 @@ function FitToCars({
       cars.map((car) => [car.latitude, car.longitude] as [number, number]),
     );
     map.fitBounds(bounds, { padding: [24, 24] });
-  }, [cars, map, region.latitude, region.longitude]);
+  }, [cars, fitToCars, map, region.latitude, region.latitudeDelta, region.longitude, region.longitudeDelta]);
 
   return null;
 }
@@ -76,6 +88,7 @@ export function SearchMap({
   cars,
   containerClassName,
   interactive = true,
+  fitToCars = true,
   selectedCarId,
   onMarkerPress,
   onOfferPress,
@@ -120,7 +133,7 @@ export function SearchMap({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             subdomains={["a", "b", "c"]}
           />
-          <FitToCars cars={cars} region={region} />
+          <FitToCars cars={cars} region={region} fitToCars={fitToCars} />
           {cars.map((car) => (
             <Marker
               key={car.id}

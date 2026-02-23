@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { View, Text, Pressable, Image, ScrollView } from "react-native";
 import { useColorScheme } from "nativewind";
@@ -68,6 +68,13 @@ export default function ProfileScreen() {
               </Text>
             </Pressable>
           </Link>
+          <Link href="/profile/settings" asChild>
+            <Pressable className="mt-3 border border-border px-6 py-3 rounded-xl w-full max-w-xs">
+              <Text className="text-foreground font-semibold text-base text-center">
+                {t("profile.menu.settings")}
+              </Text>
+            </Pressable>
+          </Link>
         </View>
       </SafeAreaView>
     );
@@ -88,6 +95,9 @@ export default function ProfileScreen() {
 
   const renterReady = Boolean(renterVerification?.enabled && renterVerification?.readyToBook);
   const hostReady = Boolean(hostPayoutStatus?.payoutsEnabled);
+  const onboardingStatus = convexUser?.onboardingStatus;
+  const showActivationSetupCard =
+    onboardingStatus === "in_progress" || onboardingStatus === "skipped";
 
   const menuItems: MenuItem[] = [
     { icon: "settings-outline", label: t("profile.menu.settings"), href: "/profile/settings" },
@@ -131,7 +141,7 @@ export default function ProfileScreen() {
               color={renterReady ? "#15803d" : getTokenColor(mode, "iconMuted")}
             />
             <Text className={`text-xs font-semibold ${renterReady ? "text-green-700" : "text-muted-foreground"}`}>
-              {" "}{t("profile.badges.renter")} · {renterReady ? t("profile.badges.verified") : t("profile.badges.pending")}
+              {" "}{t("profile.badges.renter")} - {renterReady ? t("profile.badges.verified") : t("profile.badges.pending")}
             </Text>
           </View>
           <View className={`rounded-full px-3 py-1 flex-row items-center ${hostReady ? "bg-green-100" : "bg-secondary"}`}>
@@ -141,10 +151,36 @@ export default function ProfileScreen() {
               color={hostReady ? "#15803d" : getTokenColor(mode, "iconMuted")}
             />
             <Text className={`text-xs font-semibold ${hostReady ? "text-green-700" : "text-muted-foreground"}`}>
-              {" "}{t("profile.badges.host")} · {hostReady ? t("profile.badges.verified") : t("profile.badges.pending")}
+              {" "}{t("profile.badges.host")} - {hostReady ? t("profile.badges.verified") : t("profile.badges.pending")}
             </Text>
           </View>
         </View>
+
+        {showActivationSetupCard ? (
+          <Pressable
+            onPress={() => router.push("/onboarding?step=activation")}
+            className="mb-6 rounded-xl border border-primary/30 bg-primary/5 p-4"
+          >
+            <View className="flex-row items-start">
+              <View className="w-10 h-10 rounded-full bg-primary/10 items-center justify-center">
+                <Ionicons name="sparkles-outline" size={18} color={getTokenColor(mode, "primary")} />
+              </View>
+              <View className="ml-3 flex-1">
+                <Text className="text-base font-semibold text-foreground">
+                  {t("profile.activationSetup.title")}
+                </Text>
+                <Text className="mt-1 text-sm text-muted-foreground">
+                  {onboardingStatus === "skipped"
+                    ? t("profile.activationSetup.skippedSubtitle")
+                    : t("profile.activationSetup.inProgressSubtitle")}
+                </Text>
+                <Text className="mt-2 text-sm font-semibold text-primary">
+                  {t("profile.activationSetup.cta")}
+                </Text>
+              </View>
+            </View>
+          </Pressable>
+        ) : null}
 
         <View className="bg-card rounded-xl border border-border overflow-hidden">
           {menuItems.map((item, index) => (
@@ -173,4 +209,3 @@ export default function ProfileScreen() {
     </SafeAreaView>
   );
 }
-

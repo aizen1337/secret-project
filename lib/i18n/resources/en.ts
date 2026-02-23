@@ -93,6 +93,66 @@ export const en = {
       continueFacebook: 'Continue with Facebook',
     },
   },
+  onboarding: {
+    title: "Set up your account",
+    subtitle: "Choose how you want to use the app and complete activation whenever you are ready.",
+    steps: {
+      role: "Step 1 of 2 - Role",
+      activation: "Step 2 of 2 - Activation",
+    },
+    role: {
+      title: "How will you use the app?",
+      subtitle: "You can still change this later.",
+      options: {
+        renter: {
+          label: "Renter",
+          description: "Book cars from hosts and manage your trips.",
+        },
+        host: {
+          label: "Host",
+          description: "List your car and receive payouts from bookings.",
+        },
+        both: {
+          label: "Both",
+          description: "Use renter and host features in one account.",
+        },
+      },
+    },
+    activation: {
+      title: "Activation checklist",
+      subtitle: "Complete the checks below now, or skip and continue as unverified.",
+      status: {
+        ready: "Ready",
+        pending: "Pending",
+      },
+      renter: {
+        title: "Renter activation",
+        required: "Required: complete driver's license verification.",
+        enabled: "Renter verification is enabled for bookings.",
+        disabled: "Renter verification is currently disabled. You can continue.",
+      },
+      host: {
+        title: "Host activation",
+        required: "Required: complete payouts setup for hosting.",
+        connectExists: "A Connect account already exists. Continue setup to enable payouts.",
+        connectMissing: "No Connect account yet. Start setup to activate hosting.",
+      },
+      readyToFinish: "All required activation steps are complete.",
+      canSkip: "You can skip this for now and continue as unverified.",
+    },
+    actions: {
+      finish: "Finish activation",
+      continueUnverified: "Continue without full verification",
+      skipForNow: "Skip for now",
+    },
+    messages: {
+      refreshing: "Refreshing activation status...",
+      verificationRefreshed: "Renter verification status refreshed.",
+      verificationRefreshFailed: "Could not refresh renter verification status.",
+      connectRefreshed: "Host payout status refreshed.",
+      connectRefreshFailed: "Could not refresh host payout status.",
+    },
+  },
   dashboard: {
     title: 'Dashboard',
     role: 'Host',
@@ -152,6 +212,12 @@ export const en = {
       host: 'Host',
       verified: 'Verified',
       pending: 'Pending',
+    },
+    activationSetup: {
+      title: "Activation setup",
+      inProgressSubtitle: "Finish your role activation steps to unlock full readiness.",
+      skippedSubtitle: "You skipped activation earlier. Continue setup any time.",
+      cta: "Continue setup",
     },
     payouts: {
       title: 'Payouts',
@@ -225,6 +291,10 @@ export const en = {
     noCarsFiltered: 'No cars match current filters.',
     searchLocationPlaceholder: 'Search location on map...',
     searchGo: 'Go',
+    searchOffers: 'Search offers',
+    searchingLocations: 'Searching locations...',
+    locationRequired: 'Location is required.',
+    locationSelectSuggestion: 'Select a location from the suggestions.',
     locationNotFound: 'Location not found.',
     locationSearchFailed: 'Location search failed.',
     makePlaceholder: 'Car make (e.g., BMW)',

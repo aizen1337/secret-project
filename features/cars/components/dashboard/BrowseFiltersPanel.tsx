@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { DateRangePicker } from "@/components/filters/DateRangePicker";
 import { Text } from "@/components/ui/text";
+import type { LocationSuggestion } from "@/features/cars/components/dashboard/searchUtils";
 import type { BrowseAdvancedFilters } from "@/features/cars/components/dashboard/types";
 
 import { ExploreFiltersDialog } from "./ExploreFiltersDialog";
@@ -14,6 +15,10 @@ type BrowseFiltersPanelProps = {
   locationQuery: string;
   onChangeLocation: (value: string) => void;
   onSearchLocation: () => void;
+  locationSuggestions: LocationSuggestion[];
+  showLocationSuggestions: boolean;
+  onSelectLocationSuggestion: (suggestion: LocationSuggestion) => void;
+  isSearchingLocationSuggestions: boolean;
   isSearchingLocation: boolean;
   startDate: string;
   endDate: string;
@@ -38,6 +43,10 @@ export function BrowseFiltersPanel({
   locationQuery,
   onChangeLocation,
   onSearchLocation,
+  locationSuggestions,
+  showLocationSuggestions,
+  onSelectLocationSuggestion,
+  isSearchingLocationSuggestions,
   isSearchingLocation,
   startDate,
   endDate,
@@ -57,45 +66,84 @@ export function BrowseFiltersPanel({
   isLoading,
 }: BrowseFiltersPanelProps) {
   const { t } = useTranslation();
-  const rowClassName = isMobile
-    ? "gap-2"
-    : "flex-row flex-nowrap items-stretch gap-2";
+  const rowClassName = "flex-row flex-nowrap items-stretch gap-2";
+  const filterButtonClassName = isMobile
+    ? `h-12 w-12 self-center items-center justify-center rounded-lg border ${
+        activeFiltersCount > 0 ? "border-primary bg-primary/15" : "border-border bg-card"
+      }`
+    : `h-16 w-14 shrink-0 items-center justify-center rounded-xl border ${
+        activeFiltersCount > 0 ? "border-primary bg-primary/15" : "border-border bg-card"
+      }`;
 
   return (
     <View className="gap-3">
-      <View className={rowClassName}>
-        <View className={isMobile ? "" : "min-w-0 flex-[1.7]"}>
+      {isMobile ? (
+        <>
           <LocationSearchBar
             locationQuery={locationQuery}
             onChangeLocation={onChangeLocation}
             onSearchLocation={onSearchLocation}
+            locationSuggestions={locationSuggestions}
+            showLocationSuggestions={showLocationSuggestions}
+            onSelectLocationSuggestion={onSelectLocationSuggestion}
+            isSearchingLocationSuggestions={isSearchingLocationSuggestions}
             isSearchingLocation={isSearchingLocation}
             iconColor={iconColor}
             placeholderColor={placeholderColor}
             buttonForeground={buttonForeground}
           />
-        </View>
-        <View className={isMobile ? "" : "min-w-0 flex-[1.5]"}>
-          <DateRangePicker
-            startDate={startDate}
-            endDate={endDate}
-            onApply={onApplyDates}
-          />
-        </View>
-        <Pressable
-          onPress={onOpenFiltersDialog}
-          className={`h-16 ${isMobile ? "w-full" : "w-14 shrink-0"} items-center justify-center rounded-xl border ${
-            activeFiltersCount > 0 ? "border-primary bg-primary/15" : "border-border bg-card"
-          }`}
-        >
-          <Ionicons name="options-outline" size={20} color={iconColor} />
-          {activeFiltersCount > 0 ? (
-            <View className="absolute -right-1 -top-1 min-w-5 rounded-full bg-primary px-1 py-0.5">
-              <Text className="text-center text-[10px] font-semibold text-primary-foreground">{activeFiltersCount}</Text>
+          <View className={rowClassName}>
+            <View className="min-w-0 flex-1">
+              <DateRangePicker
+                startDate={startDate}
+                endDate={endDate}
+                onApply={onApplyDates}
+              />
             </View>
-          ) : null}
-        </Pressable>
-      </View>
+            <Pressable onPress={onOpenFiltersDialog} className={filterButtonClassName}>
+              <Ionicons name="options-outline" size={18} color={iconColor} />
+              {activeFiltersCount > 0 ? (
+                <View className="absolute -right-1 -top-1 min-w-5 rounded-full bg-primary px-1 py-0.5">
+                  <Text className="text-center text-[10px] font-semibold text-primary-foreground">{activeFiltersCount}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+          </View>
+        </>
+      ) : (
+        <View className={rowClassName}>
+          <View className="min-w-0 flex-[1.7]">
+            <LocationSearchBar
+              locationQuery={locationQuery}
+              onChangeLocation={onChangeLocation}
+              onSearchLocation={onSearchLocation}
+              locationSuggestions={locationSuggestions}
+              showLocationSuggestions={showLocationSuggestions}
+              onSelectLocationSuggestion={onSelectLocationSuggestion}
+              isSearchingLocationSuggestions={isSearchingLocationSuggestions}
+              isSearchingLocation={isSearchingLocation}
+              iconColor={iconColor}
+              placeholderColor={placeholderColor}
+              buttonForeground={buttonForeground}
+            />
+          </View>
+          <View className="min-w-0 flex-[1.5]">
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onApply={onApplyDates}
+            />
+          </View>
+          <Pressable onPress={onOpenFiltersDialog} className={filterButtonClassName}>
+            <Ionicons name="options-outline" size={20} color={iconColor} />
+            {activeFiltersCount > 0 ? (
+              <View className="absolute -right-1 -top-1 min-w-5 rounded-full bg-primary px-1 py-0.5">
+                <Text className="text-center text-[10px] font-semibold text-primary-foreground">{activeFiltersCount}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        </View>
+      )}
 
       {searchError ? (
         <Text className="text-xs text-destructive">{searchError}</Text>

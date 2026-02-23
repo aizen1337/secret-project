@@ -171,7 +171,18 @@ export const getHostCarById = query({
     carId: v.id("cars"),
   },
   async handler(ctx, args) {
-    const host = await mapHost(ctx);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    if (!user) return null;
+    const host = await ctx.db
+      .query("hosts")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+    if (!host) return null;
     const car = await ctx.db.get(args.carId);
 
     if (!car) return null;
@@ -498,13 +509,13 @@ type AddressDetails = {
 
 const addressSearchCache = new ActionCache(components.actionCache, {
   action: internal.cars.searchAddressesUncached,
-  name: "address-search-v1",
+  name: "address-search-v2",
   ttl: 5 * 60 * 1000,
 });
 
 const addressDetailsCache = new ActionCache(components.actionCache, {
   action: internal.cars.resolveAddressDetailsUncached,
-  name: "address-details-v1",
+  name: "address-details-v2",
   ttl: 60 * 60 * 1000,
 });
 
@@ -521,14 +532,13 @@ export const searchAddressesUncached = internalAction({
       format: "jsonv2",
       addressdetails: "1",
       limit: "6",
-      countrycodes: "pl",
     });
 
     const response = await fetchWithTimeout(`https://nominatim.openstreetmap.org/search?${query.toString()}`, {
       method: "GET",
       headers: {
         Accept: "application/json",
-        "Accept-Language": "pl",
+        "Accept-Language": "en",
         "User-Agent": "secret-project-address-lookup/1.0",
       },
     });
@@ -576,7 +586,7 @@ export const resolveAddressDetailsUncached = internalAction({
       method: "GET",
       headers: {
         Accept: "application/json",
-        "Accept-Language": "pl",
+        "Accept-Language": "en",
         "User-Agent": "secret-project-address-lookup/1.0",
       },
     });
@@ -726,7 +736,18 @@ export const listHostCars = query({
     status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
   },
   async handler(ctx, args) {
-    const host = await mapHost(ctx);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    if (!user) return [];
+    const host = await ctx.db
+      .query("hosts")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+    if (!host) return [];
 
     const cars = await ctx.db
       .query("cars")

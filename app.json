@@ -13,6 +13,6 @@
     "web": {
       "bundler": "metro"
     },
-    "userInterfaceStyle": "dark"
+    "userInterfaceStyle": "automatic"
   }
 }

@@ -17,6 +17,10 @@ export default function TabsLayout() {
         options={{ title: t("bottomNav.explore") }}
       />
       <Tabs.Screen
+        name="search"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
         name="favorites"
         options={{ title: t("bottomNav.favorites") }}
       />

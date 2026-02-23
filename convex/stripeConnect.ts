@@ -98,15 +98,20 @@ export const createOrGetHostConnectAccount = action({
 });
 
 export const createHostOnboardingLink = action({
-  args: {},
-  async handler(ctx) {
+  args: {
+    returnUrl: v.optional(v.string()),
+    refreshUrl: v.optional(v.string()),
+  },
+  async handler(ctx, args) {
     const { stripeConnectAccountId } = await ensureHostConnectAccount(ctx);
 
     const refreshUrl =
-      process.env.STRIPE_CONNECT_REFRESH_URL ??
+      args.refreshUrl?.trim() ||
+      process.env.STRIPE_CONNECT_REFRESH_URL ||
       "http://localhost:8081/profile/payments?connect=refresh";
     const returnUrl =
-      process.env.STRIPE_CONNECT_RETURN_URL ??
+      args.returnUrl?.trim() ||
+      process.env.STRIPE_CONNECT_RETURN_URL ||
       "http://localhost:8081/profile/payments?connect=return";
 
     const accountLink = await stripeFormRequest(

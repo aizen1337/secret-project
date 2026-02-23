@@ -2,7 +2,6 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { mapClerkUser } from "./userMapper";
 import { assertCarIsBookable } from "./guards/bookingGuard";
-import { mapHost } from "./hostMapper";
 import { assertRenterCanBook } from "./guards/renterVerificationGuard";
 
 export const createBooking = mutation({
@@ -49,7 +48,17 @@ export const createBooking = mutation({
 export const listMyTripsWithPayments = query({
   args: {},
   async handler(ctx) {
-    const user = await mapClerkUser(ctx);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    if (!user) {
+      return [];
+    }
     const bookings = await ctx.db
       .query("bookings")
       .withIndex("by_renter", (q) => q.eq("renterId", user._id))
@@ -124,7 +133,24 @@ export const listMyTripsWithPayments = query({
 export const listHostBookingsWithPayouts = query({
   args: {},
   async handler(ctx) {
-    const host = await mapHost(ctx);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    if (!user) {
+      return [];
+    }
+    const host = await ctx.db
+      .query("hosts")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+    if (!host) {
+      return [];
+    }
     const cars = await ctx.db
       .query("cars")
       .withIndex("by_host", (q) => q.eq("hostId", host._id))

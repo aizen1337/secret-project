@@ -20,7 +20,7 @@ export default function Page() {
   const { isLoaded, signUp, setActive } = useSignUp()
   const router = useRouter()
   const redirectUrl = AuthSession.makeRedirectUri({ path: 'sso-callback' })
-  const redirectUrlComplete = '/(tabs)'
+  const redirectUrlComplete = '/onboarding?source=signup'
   const { startSSOFlow } = useSSO()
   const toast = useToast()
   const mode = resolveThemeMode(useColorScheme())
@@ -78,7 +78,7 @@ export default function Page() {
               return
             }
 
-            router.replace('/(tabs)')
+            router.replace('/onboarding?source=signup')
           },
         })
       } else {
@@ -123,7 +123,7 @@ export default function Page() {
 
         if (createdSessionId) {
           await setActive?.({ session: createdSessionId })
-          router.replace('/(tabs)')
+          router.replace('/onboarding?source=signup')
         } else {
           const cancelled =
             authSessionResult?.type === 'cancel' || authSessionResult?.type === 'dismiss'

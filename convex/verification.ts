@@ -17,7 +17,10 @@ function isRenterVerificationEnabled() {
   return isEnvTrue("ENABLE_RENTER_VERIFICATION", false);
 }
 
-function getIdentityReturnUrl() {
+function getIdentityReturnUrl(override?: string) {
+  if (override && override.trim()) {
+    return override.trim();
+  }
   return process.env.STRIPE_IDENTITY_RETURN_URL ?? "http://localhost:8081/profile?verification=return";
 }
 
@@ -220,7 +223,7 @@ async function getRenterVerificationSummaryForClerk(ctx: any, clerkUserId: strin
   };
 }
 
-async function startRenterCheck(ctx: any, checkType: VerificationCheckType) {
+async function startRenterCheck(ctx: any, checkType: VerificationCheckType, returnUrl?: string) {
   if (!isRenterVerificationEnabled()) {
     throw new Error("UNAVAILABLE: Renter verification is disabled.");
   }
@@ -231,7 +234,7 @@ async function startRenterCheck(ctx: any, checkType: VerificationCheckType) {
     checkType,
     subjectType: "renter",
     userId: String(user._id),
-    returnUrl: getIdentityReturnUrl(),
+    returnUrl: getIdentityReturnUrl(returnUrl),
     metadata: {
       verificationType: checkType,
     },
@@ -455,16 +458,20 @@ export const syncRenterVerificationSession = action({
 });
 
 export const startRenterIdentityCheck = action({
-  args: {},
-  async handler(ctx) {
-    return await startRenterCheck(ctx, "identity");
+  args: {
+    returnUrl: v.optional(v.string()),
+  },
+  async handler(ctx, args) {
+    return await startRenterCheck(ctx, "identity", args.returnUrl);
   },
 });
 
 export const startRenterDriverLicenseCheck = action({
-  args: {},
-  async handler(ctx) {
-    return await startRenterCheck(ctx, "driver_license");
+  args: {
+    returnUrl: v.optional(v.string()),
+  },
+  async handler(ctx, args) {
+    return await startRenterCheck(ctx, "driver_license", args.returnUrl);
   },
 });
 

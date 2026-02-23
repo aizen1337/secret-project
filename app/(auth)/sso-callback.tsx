@@ -24,7 +24,7 @@ export default function SsoCallback() {
         signInUrl: '/sign-in',
         signUpUrl: '/sign-up',
         signInFallbackRedirectUrl: '/(tabs)',
-        signUpFallbackRedirectUrl: '/(tabs)',
+        signUpFallbackRedirectUrl: '/onboarding?source=signup',
       })
       .catch((err) => {
         console.error(JSON.stringify(err, null, 2))
