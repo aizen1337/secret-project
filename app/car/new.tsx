@@ -120,9 +120,6 @@ export default function NewCarScreen() {
         depositAmount: state.depositAmount.trim() ? Number(state.depositAmount) : undefined,
         fuelPolicy: state.fuelPolicy || undefined,
         fuelPolicyNote: state.fuelPolicyNote.trim() || undefined,
-        isCarVerified: state.isCarVerified,
-        verificationSource: state.verificationSource,
-        verifiedAt: state.verifiedAt,
         idempotencyKey,
         location: {
           city: state.city.trim(),

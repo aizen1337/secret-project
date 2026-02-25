@@ -1,0 +1,3534 @@
+{
+  "url": "https://cheery-jaguar-364.convex.cloud",
+  "functions": [
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "carId": {
+            "fieldType": {
+              "tableName": "cars",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "endDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "startDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "bookings.js:createBooking",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Query",
+      "identifier": "bookings.js:listMyTripsWithPayments",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Query",
+      "identifier": "bookings.js:listHostBookingsWithPayouts",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "availableFrom": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "availableUntil": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "customFeatures": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "type": "string"
+              }
+            },
+            "optional": true
+          },
+          "depositAmount": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "features": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "type": "string"
+              }
+            },
+            "optional": true
+          },
+          "formattedAddress": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "fuelPolicy": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "fuelPolicyNote": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "idempotencyKey": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "imageStorageIds": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "tableName": "_storage",
+                "type": "id"
+              }
+            },
+            "optional": false
+          },
+          "isCarVerified": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": true
+          },
+          "kilometersLimitPerDay": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "location": {
+            "fieldType": {
+              "type": "object",
+              "value": {
+                "city": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": false
+                },
+                "country": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": false
+                },
+                "lat": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": false
+                },
+                "lng": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": false
+                }
+              }
+            },
+            "optional": false
+          },
+          "make": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "model": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "pricePerDay": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          },
+          "registrationDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "registrationNumber": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "title": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "verificationSource": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "verifiedAt": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "vin": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "year": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "cars.js:createCar",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "carId": {
+            "fieldType": {
+              "tableName": "cars",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "cars.js:getHostCarById",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "availableFrom": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "availableUntil": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "carId": {
+            "fieldType": {
+              "tableName": "cars",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "customFeatures": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "type": "string"
+              }
+            },
+            "optional": true
+          },
+          "depositAmount": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "existingImages": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "type": "string"
+              }
+            },
+            "optional": true
+          },
+          "features": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "type": "string"
+              }
+            },
+            "optional": true
+          },
+          "formattedAddress": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "fuelPolicy": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "fuelPolicyNote": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "imageStorageIds": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "tableName": "_storage",
+                "type": "id"
+              }
+            },
+            "optional": true
+          },
+          "isCarVerified": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": true
+          },
+          "kilometersLimitPerDay": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "location": {
+            "fieldType": {
+              "type": "object",
+              "value": {
+                "city": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": false
+                },
+                "country": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": false
+                },
+                "lat": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": false
+                },
+                "lng": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": false
+                }
+              }
+            },
+            "optional": false
+          },
+          "make": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "model": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "pricePerDay": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          },
+          "registrationDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "registrationNumber": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "title": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "verificationSource": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "verifiedAt": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "vin": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "year": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "cars.js:updateHostCar",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "carId": {
+            "fieldType": {
+              "tableName": "cars",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "cars.js:archiveHostCar",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "carId": {
+            "fieldType": {
+              "tableName": "cars",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "cars.js:unarchiveHostCar",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "carId": {
+            "fieldType": {
+              "tableName": "cars",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "cars.js:deleteHostCar",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Mutation",
+      "identifier": "cars.js:generateCarImageUploadUrl",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "registrationDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "registrationNumber": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "vin": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "cars.js:verifyAndAutofillCarFromVin",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "query": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "cars.js:searchAddressesUncached",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "placeId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "cars.js:resolveAddressDetailsUncached",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "query": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "sessionToken": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "cars.js:searchAddresses",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "placeId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "sessionToken": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "cars.js:resolveAddressDetails",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "endDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "startDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "cars.js:listCurrentlyAvailableCars",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "centerLat": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "centerLng": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "endDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "paginationOpts": {
+            "fieldType": {
+              "type": "object",
+              "value": {
+                "cursor": {
+                  "fieldType": {
+                    "type": "union",
+                    "value": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "optional": false
+                },
+                "endCursor": {
+                  "fieldType": {
+                    "type": "union",
+                    "value": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "optional": true
+                },
+                "id": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": true
+                },
+                "maximumBytesRead": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": true
+                },
+                "maximumRowsRead": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": true
+                },
+                "numItems": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": false
+                }
+              }
+            },
+            "optional": false
+          },
+          "radiusKm": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "startDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "cars.js:listCurrentlyAvailableCarsPaginated",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "endDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "fallbackRecentLocations": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "type": "object",
+                "value": {
+                  "city": {
+                    "fieldType": {
+                      "type": "string"
+                    },
+                    "optional": false
+                  },
+                  "country": {
+                    "fieldType": {
+                      "type": "string"
+                    },
+                    "optional": false
+                  },
+                  "description": {
+                    "fieldType": {
+                      "type": "string"
+                    },
+                    "optional": false
+                  },
+                  "lastSearchedAt": {
+                    "fieldType": {
+                      "type": "number"
+                    },
+                    "optional": false
+                  },
+                  "lat": {
+                    "fieldType": {
+                      "type": "number"
+                    },
+                    "optional": false
+                  },
+                  "lng": {
+                    "fieldType": {
+                      "type": "number"
+                    },
+                    "optional": false
+                  },
+                  "placeId": {
+                    "fieldType": {
+                      "type": "string"
+                    },
+                    "optional": false
+                  },
+                  "searchCount": {
+                    "fieldType": {
+                      "type": "number"
+                    },
+                    "optional": false
+                  }
+                }
+              }
+            },
+            "optional": true
+          },
+          "limit": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "startDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "cars.js:listPromotionalOffersForRecentLocations",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "endDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "fallbackRecentLocations": {
+            "fieldType": {
+              "type": "array",
+              "value": {
+                "type": "object",
+                "value": {
+                  "city": {
+                    "fieldType": {
+                      "type": "string"
+                    },
+                    "optional": false
+                  },
+                  "country": {
+                    "fieldType": {
+                      "type": "string"
+                    },
+                    "optional": false
+                  },
+                  "description": {
+                    "fieldType": {
+                      "type": "string"
+                    },
+                    "optional": false
+                  },
+                  "lastSearchedAt": {
+                    "fieldType": {
+                      "type": "number"
+                    },
+                    "optional": false
+                  },
+                  "lat": {
+                    "fieldType": {
+                      "type": "number"
+                    },
+                    "optional": false
+                  },
+                  "lng": {
+                    "fieldType": {
+                      "type": "number"
+                    },
+                    "optional": false
+                  },
+                  "placeId": {
+                    "fieldType": {
+                      "type": "string"
+                    },
+                    "optional": false
+                  },
+                  "searchCount": {
+                    "fieldType": {
+                      "type": "number"
+                    },
+                    "optional": false
+                  }
+                }
+              }
+            },
+            "optional": true
+          },
+          "limit": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "startDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "cars.js:listPromotionalOffersForNearbyBigCity",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "carId": {
+            "fieldType": {
+              "tableName": "cars",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "cars.js:getCarOfferById",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "status": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "active"
+                },
+                {
+                  "type": "literal",
+                  "value": "archived"
+                }
+              ]
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "cars.js:listHostCars",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Mutation",
+      "identifier": "seeders/cars.js:seedCars",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Mutation",
+      "identifier": "seeders/bookings.js:seedBookings",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Mutation",
+      "identifier": "seeders/reviews.js:seedReviews",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Mutation",
+      "identifier": "seeders/index.js:seedAll",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Query",
+      "identifier": "users.js:getCurrentUser",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Query",
+      "identifier": "users.js:getHostPayoutStatus",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Query",
+      "identifier": "users.js:getRenterVerificationStatus",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Mutation",
+      "identifier": "users.js:beginSignupOnboarding",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "role": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "renter"
+                },
+                {
+                  "type": "literal",
+                  "value": "host"
+                },
+                {
+                  "type": "literal",
+                  "value": "both"
+                }
+              ]
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "users.js:setOnboardingRole",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "status": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "completed"
+                },
+                {
+                  "type": "literal",
+                  "value": "skipped"
+                }
+              ]
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "users.js:finalizeOnboarding",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "cancelUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "carId": {
+            "fieldType": {
+              "tableName": "cars",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "endDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "startDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "successUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripe.js:createCheckoutSession",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "bookingId": {
+            "fieldType": {
+              "tableName": "bookings",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "cancelUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "successUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripe.js:createReservationPayNowSession",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "carId": {
+            "fieldType": {
+              "tableName": "cars",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "currency": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "endDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "startDate": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:createPendingBookingPaymentInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "renterId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "stripeCustomerId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:setStripeCustomerForRenterAndPaymentInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "bookingId": {
+            "fieldType": {
+              "tableName": "bookings",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:prepareReservationPayNowInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "stripeCheckoutSessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "stripeCustomerId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "stripePaymentMethodId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "stripeSetupIntentId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markPaymentMethodCollectedByCheckoutSessionInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "mode": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "stripeCheckoutSessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markCheckoutSessionExpiredInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "stripeChargeId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "stripePaymentIntentId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markReservationPaymentChargedInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "reason": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markReservationPaymentFailedInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripe.js:autoChargeReservationPaymentInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "bookingId": {
+            "fieldType": {
+              "tableName": "bookings",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "stripeCheckoutSessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:attachCheckoutSessionInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "hostId": {
+            "fieldType": {
+              "tableName": "hosts",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "stripeChargesEnabled": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": false
+          },
+          "stripeConnectAccountId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "stripeOnboardingComplete": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": false
+          },
+          "stripePayoutsEnabled": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:updateHostStripeStatusInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "stripeChargeId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "stripeCheckoutSessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "stripePaymentIntentId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markPaymentPaidByCheckoutSessionInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "stripeChargeId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "stripePaymentIntentId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markPaymentCapturedByPaymentIntentInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "captureStatus": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "pending_capture"
+                },
+                {
+                  "type": "literal",
+                  "value": "capture_failed"
+                },
+                {
+                  "type": "literal",
+                  "value": "expired"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "stripePaymentIntentId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markPaymentCaptureStateByIntentInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "captureStatus": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "pending_capture"
+                },
+                {
+                  "type": "literal",
+                  "value": "capture_failed"
+                },
+                {
+                  "type": "literal",
+                  "value": "expired"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markPaymentCaptureStateByPaymentIdInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripe.js:capturePaymentIntentForCompletedBookingInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "stripePaymentIntentId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markPaymentFailedByIntentInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "stripeChargeId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "stripePaymentIntentId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:attachChargeToPaymentIntentInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "capturedAmountCents": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "eventId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "refundedAmountCents": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "status": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "refunded"
+                },
+                {
+                  "type": "literal",
+                  "value": "partially_refunded"
+                },
+                {
+                  "type": "literal",
+                  "value": "disputed"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "stripeChargeId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markPaymentRefundOrDisputeInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "stripeTransferId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markPaymentTransferredInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "stripeTransferReversalId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:markPaymentReversedInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:updatePaymentPayoutErrorInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:updatePaymentPayoutBlockedInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "stripeCheckoutSessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "stripe.js:getPaymentByCheckoutSessionInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "stripeChargeId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "stripe.js:getPaymentByChargeIdInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "stripeConnectAccountId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "stripe.js:getHostByStripeConnectAccountIdInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "stripe.js:getPaymentForCaptureInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "bookingId": {
+            "fieldType": {
+              "tableName": "bookings",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "stripe.js:getPaymentByBookingIdInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "setupIntentId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripe.js:fetchSetupIntentPaymentMethodInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "limit": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripe.js:backfillPaymentStrategyInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "bookingId": {
+            "fieldType": {
+              "tableName": "bookings",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "bookingsLifecycle.js:completeBookingIfEndedInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "functionType": "HttpAction",
+      "method": "POST",
+      "path": "/stripe/webhook"
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Action",
+      "identifier": "stripeConnect.js:createOrGetHostConnectAccount",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "refreshUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "returnUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripeConnect.js:createHostOnboardingLink",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Action",
+      "identifier": "stripeConnect.js:refreshHostConnectStatus",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Mutation",
+      "identifier": "stripeConnect.js:ensureHostInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "hostId": {
+            "fieldType": {
+              "tableName": "hosts",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "stripeConnectAccountId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripeConnect.js:refreshHostConnectStatusInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "stripeConnectAccountId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripeConnect.js:getStripeAccountUncached",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "limit": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripeConnect.js:resyncAllHostsFromStripeInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "stripePayouts.js:markBookingCompletedAndEligibleInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripePayouts.js:releaseHostPayoutInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "stripePayouts.js:getPaymentForPayoutInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "rawBody": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "signatureHeader": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "stripeWebhook.js:handleStripeWebhookInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Action",
+      "identifier": "stripeWebhook.js:setupWebhookEndpoint",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Action",
+      "identifier": "stripeWebhook.js:setupWebhookEndpointInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "bookingId": {
+            "fieldType": {
+              "tableName": "bookings",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "comment": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "rating": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "bookingReviews.js:createBookingReview",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "direction": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "host_to_renter"
+                },
+                {
+                  "type": "literal",
+                  "value": "renter_to_host"
+                }
+              ]
+            },
+            "optional": true
+          },
+          "limit": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "bookingReviews.js:listReviewsForUser",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "direction": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "host_to_renter"
+                },
+                {
+                  "type": "literal",
+                  "value": "renter_to_host"
+                }
+              ]
+            },
+            "optional": true
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "bookingReviews.js:getUserReviewSummary",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Mutation",
+      "identifier": "verification.js:ensureUserForVerificationInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "clerkUserId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "verification.js:getRenterEligibilityInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Query",
+      "identifier": "verification.js:getMyRenterVerificationStatus",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "sessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "verification.js:fetchStripeVerificationSessionUncached",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "sessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "verification.js:findRenterCheckBySessionInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "clerkUserId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "verification.js:getLatestRenterSessionIdForClerkInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "sessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "verification.js:syncRenterVerificationSession",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "returnUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "verification.js:startRenterIdentityCheck",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "returnUrl": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "verification.js:startRenterDriverLicenseCheck",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Action",
+      "identifier": "verification.js:startRenterIdentityCheckInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Action",
+      "identifier": "verification.js:startRenterDriverLicenseCheckInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "checkType": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "identity"
+                },
+                {
+                  "type": "literal",
+                  "value": "driver_license"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "provider": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "stripe"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "providerSessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "subjectType": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "renter"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "verification.js:upsertCheckSessionInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "checkType": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "identity"
+                },
+                {
+                  "type": "literal",
+                  "value": "driver_license"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "providerSessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "rejectionReason": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "status": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "pending"
+                },
+                {
+                  "type": "literal",
+                  "value": "verified"
+                },
+                {
+                  "type": "literal",
+                  "value": "rejected"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "subjectType": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "renter"
+                }
+              ]
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "verification.js:updateCheckFromProviderSessionInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "limit": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "verification.js:backfillRenterVerificationsToChecksInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "clerkUserId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "identity.js:getCurrentUserVerificationInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Query",
+      "identifier": "identity.js:getRenterVerificationStatus",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Action",
+      "identifier": "identity.js:createIdentityVerificationSession",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Action",
+      "identifier": "identity.js:createDriverLicenseVerificationSession",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "sessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "userId": {
+            "fieldType": {
+              "tableName": "users",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "verificationType": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "identity"
+                },
+                {
+                  "type": "literal",
+                  "value": "driver_license"
+                }
+              ]
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "identity.js:upsertRenterVerificationSessionInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "rejectionReason": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          },
+          "sessionId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "status": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "pending"
+                },
+                {
+                  "type": "literal",
+                  "value": "verified"
+                },
+                {
+                  "type": "literal",
+                  "value": "rejected"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "verificationType": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "identity"
+                },
+                {
+                  "type": "literal",
+                  "value": "driver_license"
+                }
+              ]
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "identity.js:updateRenterVerificationFromStripeSessionInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "days": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "paymentsOrchestrator.js:selectStrategyInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "bookingId": {
+            "fieldType": {
+              "tableName": "bookings",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "reason": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "requestedAmount": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "depositCases.js:fileHostDepositCase",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "depositCases.js:listOpenDepositCasesForPaymentInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "depositCases.js:autoRefundDepositIfNoCaseInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "depositCases.js:markDepositStatusRefundPendingInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "amount": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          },
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "depositCases.js:markDepositRefundedInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "paymentId": {
+            "fieldType": {
+              "tableName": "payments",
+              "type": "id"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "depositCases.js:markDepositStatusCaseSubmittedInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "caseId": {
+            "fieldType": {
+              "tableName": "deposit_cases",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "resolution": {
+            "fieldType": {
+              "type": "union",
+              "value": [
+                {
+                  "type": "literal",
+                  "value": "approve"
+                },
+                {
+                  "type": "literal",
+                  "value": "partial"
+                },
+                {
+                  "type": "literal",
+                  "value": "reject"
+                }
+              ]
+            },
+            "optional": false
+          },
+          "resolutionAmount": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "reviewerNote": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "depositCases.js:resolveDepositCaseInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "city": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "country": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "description": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "lat": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          },
+          "lng": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          },
+          "placeId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "recentSearches.js:upsertRecentLocationSearch",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "limit": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "recentSearches.js:listMyRecentLocationSearches",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Mutation",
+      "identifier": "seeders/absurdListings.js:ensureAbsurdSeederHostInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "batchSize": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "totalCount": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Action",
+      "identifier": "seeders/absurdListings.js:seedAbsurdListings",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "count": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          },
+          "hostId": {
+            "fieldType": {
+              "tableName": "hosts",
+              "type": "id"
+            },
+            "optional": false
+          },
+          "startIndex": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "seeders/absurdListings.js:seedAbsurdListingsBatchInternal",
+      "returns": {
+        "type": "any"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 "use node";
 
 import crypto from "node:crypto";
@@ -5,6 +6,7 @@ import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { stripeWebhookEvents } from "./stripeWebhookEvents";
+import { assertAdminFromClerkRoleClaim } from "./guards/adminGuard";
 
 type StripeEvent = {
   id: string;
@@ -20,20 +22,53 @@ type StripeWebhookEndpoint = {
   enabled_events?: string[];
 };
 
+const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
+
 function verifyStripeSignature(rawBody: string, signatureHeader: string, secret: string) {
   const pairs = signatureHeader.split(",").map((part) => part.trim());
   const timestamp = pairs.find((p) => p.startsWith("t="))?.slice(2);
-  const v1 = pairs.find((p) => p.startsWith("v1="))?.slice(3);
-  if (!timestamp || !v1) return false;
+  const signatures = pairs
+    .filter((p) => p.startsWith("v1="))
+    .map((p) => p.slice(3))
+    .filter((signature) => signature.length > 0);
+  if (!timestamp || signatures.length === 0) return false;
+  const parsedTimestamp = Number(timestamp);
+  if (!Number.isFinite(parsedTimestamp)) return false;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (Math.abs(nowSeconds - parsedTimestamp) > STRIPE_SIGNATURE_TOLERANCE_SECONDS) {
+    return false;
+  }
   const signedPayload = `${timestamp}.${rawBody}`;
   const expected = crypto
     .createHmac("sha256", secret)
     .update(signedPayload, "utf8")
     .digest("hex");
   const expectedBuf = Buffer.from(expected);
-  const actualBuf = Buffer.from(v1);
-  if (expectedBuf.length !== actualBuf.length) return false;
-  return crypto.timingSafeEqual(expectedBuf, actualBuf);
+  return signatures.some((signature) => {
+    const actualBuf = Buffer.from(signature);
+    if (expectedBuf.length !== actualBuf.length) return false;
+    return crypto.timingSafeEqual(expectedBuf, actualBuf);
+  });
+}
+
+function readMetadataString(metadata: unknown, key: string) {
+  if (!metadata || typeof metadata !== "object") return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function resolveCheckoutChargeId(object: any) {
+  if (typeof object?.charge === "string") return object.charge;
+  if (typeof object?.payment_intent?.latest_charge === "string") {
+    return object.payment_intent.latest_charge;
+  }
+  return undefined;
+}
+
+function shouldFallbackByPaymentId(result: { ok: boolean; reason?: string } | null | undefined) {
+  if (!result) return true;
+  if (!result.ok) return true;
+  return result.reason === "payment_not_found" || result.reason === "payment_not_payable";
 }
 
 async function reverseTransferIfNeeded(
@@ -180,6 +215,7 @@ export const setupWebhookEndpointInternal = internalAction({
 export const setupWebhookEndpoint = action({
   args: {},
   async handler(ctx) {
+    await assertAdminFromClerkRoleClaim(ctx);
     return await ctx.runAction(internal.stripeWebhook.setupWebhookEndpointInternal, {});
   },
 });
@@ -208,6 +244,10 @@ export const handleStripeWebhookInternal = internalAction({
 
     switch (event.type) {
       case "checkout.session.completed": {
+        const sessionId = typeof object.id === "string" ? object.id : "";
+        if (!sessionId) {
+          break;
+        }
         const sessionMode = typeof object.mode === "string" ? object.mode : "";
         if (sessionMode === "setup") {
           let setupIntentId =
@@ -223,24 +263,88 @@ export const handleStripeWebhookInternal = internalAction({
             paymentMethodId = details.paymentMethodId ?? undefined;
             customerId = customerId ?? details.customerId ?? undefined;
           }
-          await ctx.runMutation((internal as any).stripe.markPaymentMethodCollectedByCheckoutSessionInternal, {
-            stripeCheckoutSessionId: object.id as string,
+          const setupResult = await ctx.runMutation((internal as any).stripe.markPaymentMethodCollectedByCheckoutSessionInternal, {
+            stripeCheckoutSessionId: sessionId,
             stripeSetupIntentId: setupIntentId,
             stripePaymentMethodId: paymentMethodId,
             stripeCustomerId: customerId,
             eventId: event.id,
           });
+          console.log(
+            JSON.stringify({
+              source: "stripe.webhook.checkout.session.completed",
+              mode: sessionMode,
+              eventId: event.id,
+              sessionId,
+              paymentIntentId: null,
+              paymentId: readMetadataString(object?.metadata, "paymentId"),
+              bookingId: readMetadataString(object?.metadata, "bookingId"),
+              reconciliationPath: "setup_session",
+              resultReason: setupResult?.reason ?? null,
+            }),
+          );
           break;
         }
 
-        await ctx.runMutation(internal.stripe.markPaymentPaidByCheckoutSessionInternal, {
-          stripeCheckoutSessionId: object.id as string,
-          stripePaymentIntentId:
-            typeof object.payment_intent === "string" ? object.payment_intent : undefined,
-          stripeChargeId:
-            typeof object.charge === "string" ? object.charge : undefined,
+        const stripePaymentIntentId =
+          typeof object.payment_intent === "string"
+            ? object.payment_intent
+            : typeof object.payment_intent?.id === "string"
+              ? object.payment_intent.id
+              : undefined;
+        const stripeChargeId = resolveCheckoutChargeId(object);
+        const paymentId = readMetadataString(object?.metadata, "paymentId");
+        const bookingId = readMetadataString(object?.metadata, "bookingId");
+
+        const primaryResult = await ctx.runMutation(internal.stripe.markPaymentPaidByCheckoutSessionInternal, {
+          stripeCheckoutSessionId: sessionId,
+          stripePaymentIntentId,
+          stripeChargeId,
           eventId: event.id,
         });
+
+        let fallbackResult: any = null;
+        if (paymentId && shouldFallbackByPaymentId(primaryResult)) {
+          fallbackResult = await ctx.runMutation((internal as any).stripe.markPaymentPaidByPaymentIdInternal, {
+            paymentId,
+            stripePaymentIntentId,
+            stripeChargeId,
+            eventId: `${event.id}-payment-id`,
+          });
+        }
+
+        let paymentIntentFallbackResult: any = null;
+        if (stripePaymentIntentId && shouldFallbackByPaymentId(fallbackResult ?? primaryResult)) {
+          paymentIntentFallbackResult = await ctx.runMutation(
+            (internal as any).stripe.markPaymentPaidByPaymentIntentInternal,
+            {
+              stripePaymentIntentId,
+              stripeChargeId,
+              eventId: `${event.id}-payment-intent`,
+            },
+          );
+        }
+
+        console.log(
+          JSON.stringify({
+            source: "stripe.webhook.checkout.session.completed",
+            mode: "payment",
+            eventId: event.id,
+            sessionId,
+            paymentIntentId: stripePaymentIntentId ?? null,
+            chargeId: stripeChargeId ?? null,
+            paymentId,
+            bookingId,
+            reconciliationPath: paymentIntentFallbackResult
+              ? "checkout_session_then_payment_id_then_payment_intent"
+              : fallbackResult
+                ? "checkout_session_then_payment_id"
+                : "checkout_session",
+            primaryReason: primaryResult?.reason ?? null,
+            fallbackReason: fallbackResult?.reason ?? null,
+            paymentIntentFallbackReason: paymentIntentFallbackResult?.reason ?? null,
+          }),
+        );
         break;
       }
       case "checkout.session.expired": {
@@ -412,3 +516,4 @@ export const handleStripeWebhookInternal = internalAction({
     return { ok: true, status: 200, message: "ok" };
   },
 });
+

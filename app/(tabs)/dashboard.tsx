@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { useColorScheme } from "nativewind";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
@@ -14,6 +14,72 @@ import { toLocalizedErrorMessage } from "@/lib/errors";
 import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 import { HostListingsSection } from "@/features/cars/components/dashboard/HostListingsSection";
 
+function toReadableFallback(status: string | undefined) {
+  if (!status) return "-";
+  return status
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function statusBadgeClasses(status: string | undefined) {
+  const normalized = (status ?? "").toLowerCase();
+
+  if (
+    normalized === "paid" ||
+    normalized === "confirmed" ||
+    normalized === "completed" ||
+    normalized === "transferred" ||
+    normalized === "held" ||
+    normalized === "refunded"
+  ) {
+    return {
+      container: "bg-green-500/15",
+      text: "text-green-300",
+    };
+  }
+
+  if (
+    normalized === "pending" ||
+    normalized === "payment_pending" ||
+    normalized === "method_collection_pending" ||
+    normalized === "method_saved" ||
+    normalized === "eligible" ||
+    normalized === "refund_pending" ||
+    normalized === "case_submitted" ||
+    normalized === "under_review" ||
+    normalized === "checkout_created"
+  ) {
+    return {
+      container: "bg-amber-500/15",
+      text: "text-amber-300",
+    };
+  }
+
+  if (
+    normalized === "failed" ||
+    normalized === "payment_failed" ||
+    normalized === "cancelled" ||
+    normalized === "blocked" ||
+    normalized === "error" ||
+    normalized === "rejected" ||
+    normalized === "retained" ||
+    normalized === "reversed" ||
+    normalized === "disputed"
+  ) {
+    return {
+      container: "bg-red-500/15",
+      text: "text-red-300",
+    };
+  }
+
+  return {
+    container: "bg-secondary",
+    text: "text-muted-foreground",
+  };
+}
+
 export default function DashboardScreen() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -21,11 +87,14 @@ export default function DashboardScreen() {
   const mode = resolveThemeMode(useColorScheme());
   const { isLoaded, isSignedIn } = useAuth();
   const signedIn = Boolean(isSignedIn);
+  const hostPayoutStatus = useQuery(api.users.getHostPayoutStatus, signedIn ? {} : "skip");
+  const hostVerified = Boolean(hostPayoutStatus?.hostVerified);
   const [activeTab, setActiveTab] = useState<"listings" | "bookings">("listings");
   const [listingStatus, setListingStatus] = useState<"active" | "archived">("active");
   const [pendingCarId, setPendingCarId] = useState<string | null>(null);
   const [pendingReviewBookingId, setPendingReviewBookingId] = useState<string | null>(null);
   const [pendingDepositCaseBookingId, setPendingDepositCaseBookingId] = useState<string | null>(null);
+  const [pendingCancelBookingId, setPendingCancelBookingId] = useState<string | null>(null);
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, { rating: number; comment: string }>>({});
   const [optimisticStatusByCarId, setOptimisticStatusByCarId] = useState<Record<string, boolean>>({});
   const archiveHostCar = useMutation(api.cars.archiveHostCar);
@@ -33,12 +102,29 @@ export default function DashboardScreen() {
   const deleteHostCar = useMutation(api.cars.deleteHostCar);
   const createBookingReview = useMutation(api.bookingReviews.createBookingReview as any);
   const fileHostDepositCase = useMutation((api as any).depositCases.fileHostDepositCase);
+  const cancelReservation = useMutation((api as any).bookings.cancelReservation);
   const myCars = useQuery(
     api.cars.listHostCars,
-    signedIn ? { status: listingStatus } : "skip",
+    signedIn && hostVerified ? { status: listingStatus } : "skip",
   );
-  const hostPayouts = useQuery(api.bookings.listHostBookingsWithPayouts, signedIn ? {} : "skip");
-  const isLoading = signedIn && myCars === undefined;
+  const hostPayouts = useQuery(
+    api.bookings.listHostBookingsWithPayouts,
+    signedIn && hostVerified ? {} : "skip",
+  );
+  const isLoading = signedIn && hostVerified && myCars === undefined;
+
+  const localizeStatus = (status: string | undefined) => {
+    if (!status) {
+      return t("common.unknown");
+    }
+    const normalized = status.toLowerCase();
+    const key = `trips.statuses.${normalized}`;
+    const translated = t(key);
+    if (translated === key) {
+      return toReadableFallback(normalized);
+    }
+    return translated;
+  };
 
   const displayedCars = useMemo(() => {
     const cars: Doc<"cars">[] = myCars ?? [];
@@ -156,6 +242,48 @@ export default function DashboardScreen() {
     }
   };
 
+  const handleCancelReservation = async (bookingId: string) => {
+    setPendingCancelBookingId(bookingId);
+    try {
+      await cancelReservation({ bookingId: bookingId as any });
+      toast.success(t("dashboard.cancelReservationSuccess"));
+    } catch (error) {
+      toast.error(toLocalizedErrorMessage(error, t));
+    } finally {
+      setPendingCancelBookingId(null);
+    }
+  };
+
+  const stopEventPropagation = (event: any) => {
+    if (event && typeof event.stopPropagation === "function") {
+      event.stopPropagation();
+    }
+  };
+
+  const openBookingDetails = (bookingId: string) => {
+    if (!bookingId) return;
+    router.push({
+      pathname: "/booking/[bookingId]",
+      params: { bookingId, source: "dashboard" },
+    } as any);
+  };
+
+  const openBookingChat = (bookingId: string) => {
+    if (!bookingId) return;
+    router.push({
+      pathname: "/booking/[bookingId]/chat",
+      params: { bookingId },
+    } as any);
+  };
+
+  const openUserProfile = (userId: string, role: "host" | "renter") => {
+    if (!userId) return;
+    router.push({
+      pathname: "/user/[userId]",
+      params: { userId, role },
+    } as any);
+  };
+
   if (!isLoaded) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
@@ -183,6 +311,41 @@ export default function DashboardScreen() {
             <Pressable className="bg-primary px-6 py-3 rounded-xl">
               <Text className="text-primary-foreground font-semibold text-base">
                 {t("common.actions.signIn")}
+              </Text>
+            </Pressable>
+          </Link>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (hostPayoutStatus === undefined) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-base text-muted-foreground">{t("common.loading")}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!hostVerified) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
+        <View className="flex-1 items-center justify-center px-6">
+          <View className="w-20 h-20 bg-secondary rounded-full items-center justify-center mb-4">
+            <Ionicons name="shield-checkmark-outline" size={40} color={getTokenColor(mode, "iconMuted")} />
+          </View>
+          <Text className="text-xl font-semibold text-foreground mb-2 text-center">
+            {t("dashboard.hostVerificationRequiredTitle")}
+          </Text>
+          <Text className="text-base text-muted-foreground text-center mb-6">
+            {t("dashboard.hostVerificationRequiredSubtitle")}
+          </Text>
+          <Link href="/profile/payments" asChild>
+            <Pressable className="bg-primary px-6 py-3 rounded-xl">
+              <Text className="text-primary-foreground font-semibold text-base">
+                {t("common.actions.setUpPayouts")}
               </Text>
             </Pressable>
           </Link>
@@ -292,46 +455,162 @@ export default function DashboardScreen() {
           ) : (
             <View>
               {hostPayouts && hostPayouts.length > 0 ? (
-                hostPayouts.map((entry: any) => (
-                  <View key={entry.payment._id} className="bg-card rounded-xl p-4 border border-border mb-3">
-                    <Text className="text-sm font-semibold text-foreground">
-                      {entry.car?.title || `${entry.car?.make ?? t("trips.carFallback")} ${entry.car?.model ?? ""}`}
-                    </Text>
-                    {entry.renter?.name ? (
-                      <Text className="text-xs text-muted-foreground mt-1">{entry.renter.name}</Text>
-                    ) : null}
-                    <Text className="text-xs text-muted-foreground mt-1">
-                      {t("dashboard.bookingStatus", { status: entry.booking?.status ?? t("common.unknown") })}
-                    </Text>
-                    <Text className="text-xs text-muted-foreground">
-                      {t("dashboard.payment", { status: entry.payment.status })}
-                    </Text>
-                    <Text className="text-xs text-muted-foreground">
-                      {t("dashboard.payout", { status: entry.payment.payoutStatus })}
-                    </Text>
-                    <Text className="text-xs text-muted-foreground">
-                      {t("dashboard.depositStatus", { status: entry.payment.depositStatus ?? t("common.unknown") })}
-                    </Text>
-                    {entry.payment.depositClaimWindowEndsAt ? (
-                      <Text className="text-xs text-muted-foreground">
-                        {t("dashboard.depositClaimWindow", {
-                          date: new Date(entry.payment.depositClaimWindowEndsAt).toLocaleString(),
-                        })}
-                      </Text>
+                hostPayouts.map((entry: any) => {
+                  const bookingId = entry.booking ? String(entry.booking._id) : "";
+                  const canCancel = Boolean(bookingId && entry.canCancel);
+                  const bookingStatusTone = statusBadgeClasses(entry.booking?.status);
+                  const paymentStatusTone = statusBadgeClasses(entry.payment?.status);
+                  const payoutStatusTone = statusBadgeClasses(entry.payment?.payoutStatus);
+                  const depositStatusTone = statusBadgeClasses(entry.payment?.depositStatus);
+                  const bookingStatusLabel = localizeStatus(entry.booking?.status);
+                  const paymentStatusLabel = localizeStatus(entry.payment?.status ?? "pending");
+                  const payoutStatusLabel = localizeStatus(entry.payment?.payoutStatus ?? "pending");
+                  const depositStatusLabel = localizeStatus(entry.payment?.depositStatus);
+                  const paymentDueAt = entry.payment?.paymentDueAt ? new Date(entry.payment.paymentDueAt) : null;
+                  const transferScheduledAt =
+                    entry.payment?.payoutStatus === "eligible" && entry.payment?.releaseAt
+                      ? new Date(entry.payment.releaseAt)
+                      : null;
+                  const depositClaimWindowEndsAt = entry.payment?.depositClaimWindowEndsAt
+                    ? new Date(entry.payment.depositClaimWindowEndsAt)
+                    : null;
+                  const tripStart = entry.booking?.startDate ? new Date(entry.booking.startDate) : null;
+                  const tripEnd = entry.booking?.endDate ? new Date(entry.booking.endDate) : null;
+                  const tripDateLabel =
+                    tripStart && tripEnd
+                      ? `${tripStart.toLocaleDateString()} - ${tripEnd.toLocaleDateString()}`
+                      : null;
+
+                  return (
+                    <Pressable
+                      key={entry.payment._id}
+                      onPress={() => openBookingDetails(bookingId)}
+                      disabled={!bookingId}
+                      className="bg-card border border-border rounded-2xl p-4 mb-4"
+                    >
+                      <View className="flex-row items-center">
+                        {entry.car?.images?.[0] ? (
+                          <Image source={{ uri: entry.car.images[0] }} className="w-16 h-16 rounded-xl" />
+                        ) : (
+                          <View className="w-16 h-16 rounded-xl bg-secondary" />
+                        )}
+                        <View className="ml-3 flex-1">
+                          <View className="flex-row items-start justify-between gap-2">
+                            <View className="flex-1">
+                              <Text className="text-base font-semibold text-foreground">
+                                {entry.car?.title || `${entry.car?.make ?? t("trips.carFallback")} ${entry.car?.model ?? ""}`}
+                              </Text>
+                              {entry.renter?.name && entry.renter?.id ? (
+                                <Pressable
+                                  onPress={(event) => {
+                                    stopEventPropagation(event);
+                                    openUserProfile(String(entry.renter.id), "renter");
+                                  }}
+                                >
+                                  <Text className="text-xs text-muted-foreground mt-1">{entry.renter.name}</Text>
+                                </Pressable>
+                              ) : null}
+                              {tripDateLabel ? (
+                                <Text className="text-xs text-muted-foreground mt-1">{tripDateLabel}</Text>
+                              ) : null}
+                            </View>
+                            <View className={`rounded-full px-2.5 py-1 ${bookingStatusTone.container}`}>
+                              <Text className={`text-[11px] font-semibold ${bookingStatusTone.text}`}>
+                                {bookingStatusLabel}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+
+                      <View className="mt-3 flex-row flex-wrap gap-2">
+                        <View className={`rounded-full px-2.5 py-1 ${paymentStatusTone.container}`}>
+                          <Text className={`text-[11px] font-medium ${paymentStatusTone.text}`}>
+                            {t("trips.payment", { status: paymentStatusLabel })}
+                          </Text>
+                        </View>
+                        <View className={`rounded-full px-2.5 py-1 ${payoutStatusTone.container}`}>
+                          <Text className={`text-[11px] font-medium ${payoutStatusTone.text}`}>
+                            {t("trips.payout", { status: payoutStatusLabel })}
+                          </Text>
+                        </View>
+                        {entry.payment?.depositStatus ? (
+                          <View className={`rounded-full px-2.5 py-1 ${depositStatusTone.container}`}>
+                            <Text className={`text-[11px] font-medium ${depositStatusTone.text}`}>
+                              {t("trips.depositStatus", { status: depositStatusLabel })}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {paymentDueAt ? (
+                          <View className="rounded-full px-2.5 py-1 bg-secondary">
+                            <Text className="text-[11px] font-medium text-muted-foreground">
+                              {t("trips.paymentDue", { date: paymentDueAt.toLocaleString() })}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {transferScheduledAt ? (
+                          <View className="rounded-full px-2.5 py-1 bg-secondary">
+                            <Text className="text-[11px] font-medium text-muted-foreground">
+                              {t("dashboard.transferScheduled", { date: transferScheduledAt.toLocaleString() })}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {depositClaimWindowEndsAt ? (
+                          <View className="rounded-full px-2.5 py-1 bg-secondary">
+                            <Text className="text-[11px] font-medium text-muted-foreground">
+                              {t("dashboard.depositClaimWindow", { date: depositClaimWindowEndsAt.toLocaleString() })}
+                            </Text>
+                          </View>
+                        ) : null}
+                        <Pressable
+                          onPress={(event) => {
+                            stopEventPropagation(event);
+                            openBookingChat(bookingId);
+                          }}
+                          className="rounded-full px-2.5 py-1 bg-secondary"
+                        >
+                          <Text className="text-[11px] font-medium text-muted-foreground">
+                            {Number(entry.chat?.unreadCount ?? 0) > 0
+                              ? t("bookingChat.openWithUnread", { count: entry.chat.unreadCount })
+                              : t("bookingChat.open")}
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                    {canCancel ? (
+                      <Pressable
+                        onPress={(event) => {
+                          stopEventPropagation(event);
+                          void handleCancelReservation(bookingId);
+                        }}
+                        disabled={pendingCancelBookingId === bookingId}
+                        className={`mt-3 rounded-lg py-2 items-center ${
+                          pendingCancelBookingId === bookingId ? "bg-destructive/60" : "bg-destructive"
+                        }`}
+                      >
+                        <Text className="text-sm font-semibold text-primary-foreground">
+                          {pendingCancelBookingId === bookingId
+                            ? t("dashboard.cancellingReservation")
+                            : t("dashboard.cancelReservation")}
+                        </Text>
+                      </Pressable>
                     ) : null}
 
                     {entry.canFileDepositCase ? (
                       <Pressable
-                        onPress={() => handleFileDepositCase(String(entry.booking._id))}
-                        disabled={pendingDepositCaseBookingId === String(entry.booking._id)}
+                        onPress={(event) => {
+                          stopEventPropagation(event);
+                          void handleFileDepositCase(bookingId);
+                        }}
+                        disabled={!bookingId || pendingDepositCaseBookingId === bookingId}
                         className={`mt-3 rounded-lg py-2 items-center ${
-                          pendingDepositCaseBookingId === String(entry.booking._id)
+                          pendingDepositCaseBookingId === bookingId
                             ? "bg-primary/60"
                             : "bg-primary"
                         }`}
                       >
                         <Text className="text-sm font-semibold text-primary-foreground">
-                          {pendingDepositCaseBookingId === String(entry.booking._id)
+                          {pendingDepositCaseBookingId === bookingId
                             ? t("common.loading")
                             : t("dashboard.fileDepositCase")}
                         </Text>
@@ -355,10 +634,15 @@ export default function DashboardScreen() {
                         </Text>
                         <View className="flex-row gap-1 mb-2">
                           {[1, 2, 3, 4, 5].map((rating) => {
-                            const bookingId = String(entry.booking._id);
                             const draft = reviewDrafts[bookingId] ?? { rating: 5, comment: "" };
                             return (
-                              <Pressable key={rating} onPress={() => updateReviewDraft(bookingId, { rating })}>
+                              <Pressable
+                                key={rating}
+                                onPress={(event) => {
+                                  stopEventPropagation(event);
+                                  updateReviewDraft(bookingId, { rating });
+                                }}
+                              >
                                 <Ionicons
                                   name={rating <= draft.rating ? "star" : "star-outline"}
                                   size={18}
@@ -369,18 +653,21 @@ export default function DashboardScreen() {
                           })}
                         </View>
                         <TextInput
-                          value={reviewDrafts[String(entry.booking._id)]?.comment ?? ""}
-                          onChangeText={(comment) => updateReviewDraft(String(entry.booking._id), { comment })}
+                          value={reviewDrafts[bookingId]?.comment ?? ""}
+                          onChangeText={(comment) => updateReviewDraft(bookingId, { comment })}
                           placeholder={t("profile.reviews.commentPlaceholder")}
                           placeholderTextColor={getTokenColor(mode, "placeholder")}
                           className="rounded-lg border border-border px-3 py-2 text-sm text-foreground"
                           multiline
                         />
                         <Pressable
-                          onPress={() => handleSubmitHostReview(String(entry.booking._id))}
-                          disabled={pendingReviewBookingId === String(entry.booking._id)}
+                          onPress={(event) => {
+                            stopEventPropagation(event);
+                            void handleSubmitHostReview(bookingId);
+                          }}
+                          disabled={pendingReviewBookingId === bookingId}
                           className={`mt-2 rounded-lg py-2 items-center ${
-                            pendingReviewBookingId === String(entry.booking._id)
+                            pendingReviewBookingId === bookingId
                               ? "bg-primary/60"
                               : "bg-primary"
                           }`}
@@ -391,8 +678,9 @@ export default function DashboardScreen() {
                         </Pressable>
                       </View>
                     ) : null}
-                  </View>
-                ))
+                    </Pressable>
+                  );
+                })
               ) : (
                 <View className="bg-card rounded-xl p-4 border border-border">
                   <Text className="text-sm text-muted-foreground text-center">
@@ -407,4 +695,5 @@ export default function DashboardScreen() {
     </SafeAreaView>
   );
 }
+
 

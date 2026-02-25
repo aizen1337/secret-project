@@ -18,12 +18,14 @@ import {
 type DateRangePickerProps = {
   startDate: string;
   endDate: string;
+  showLabel?: boolean;
   onApply: (startDate: string, endDate: string) => void;
 };
 
 export function DateRangePicker({
   startDate,
   endDate,
+  showLabel = true,
   onApply,
 }: DateRangePickerProps) {
   const { t } = useTranslation();
@@ -92,10 +94,14 @@ export function DateRangePicker({
     <>
       <Pressable
         onPress={open}
-        className="h-16 rounded-xl border border-border bg-card px-3 py-2.5 justify-center"
+        className={`rounded-xl border border-border bg-card px-3 justify-center ${
+          showLabel ? "h-16 py-2.5" : "h-14 py-2"
+        }`}
       >
-        <Text className="text-xs uppercase text-muted-foreground">{t("common.datePicker.dates")}</Text>
-        <View className="mt-1 flex-row items-center justify-between">
+        {showLabel ? (
+          <Text className="text-xs uppercase text-muted-foreground">{t("common.datePicker.dates")}</Text>
+        ) : null}
+        <View className={`${showLabel ? "mt-1" : "mt-0"} flex-row items-center justify-between`}>
           <Text className="text-sm text-foreground">
             {humanDate(startDate)} - {humanDate(endDate)}
           </Text>

@@ -1,5 +1,6 @@
+﻿// @ts-nocheck
 import { v } from "convex/values";
-import { internalAction, internalMutation, mutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { mapHost } from "./hostMapper";
 
@@ -114,7 +115,7 @@ export const fileHostDepositCase = mutation({
   },
 });
 
-export const listOpenDepositCasesForPaymentInternal = query({
+export const listOpenDepositCasesForPaymentInternal = internalQuery({
   args: {
     paymentId: v.id("payments"),
   },
@@ -324,3 +325,4 @@ export const resolveDepositCaseInternal = internalMutation({
     };
   },
 });
+

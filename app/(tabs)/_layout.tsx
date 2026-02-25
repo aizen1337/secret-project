@@ -29,8 +29,12 @@ export default function TabsLayout() {
         options={{ title: t("bottomNav.trips") }}
       />
       <Tabs.Screen
+        name="chats"
+        options={{ title: t("bottomNav.chats") }}
+      />
+      <Tabs.Screen
         name="dashboard"
-        options={{ title: t("bottomNav.host") }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="profile"

@@ -3,7 +3,7 @@ import { useColorScheme } from "nativewind";
 import { FlatList, Pressable, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useAction, useQuery } from "convex/react";
+import { useAction, usePaginatedQuery } from "convex/react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "@/convex/_generated/api";
@@ -13,7 +13,6 @@ import { CarResultsList } from "@/features/cars/components/dashboard/CarResultsL
 import {
   DEFAULT_SEARCH_RADIUS_KM,
   buildRegionForRadius,
-  haversineKm,
   isDateInput,
   normalizeParam,
   toDateInputValue,
@@ -26,6 +25,11 @@ import { SearchMap } from "@/features/map/SearchMap";
 import type { CarLocation } from "@/features/map/SearchMap";
 import { Text } from "@/components/ui/text";
 import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
+import {
+  buildSearchResultsCacheKey,
+  loadSearchResultsCache,
+  saveSearchResultsCache,
+} from "@/lib/searchResultsCache";
 
 function createEmptyAdvancedFilters(): BrowseAdvancedFilters {
   return {
@@ -39,6 +43,8 @@ function createEmptyAdvancedFilters(): BrowseAdvancedFilters {
     verifiedOnly: false,
   };
 }
+
+const SEARCH_PAGE_SIZE = 120;
 
 export default function SearchScreen() {
   const { t } = useTranslation();
@@ -102,6 +108,7 @@ export default function SearchScreen() {
     lat: initialCenterLat,
     lng: initialCenterLng,
   }));
+  const [cachedCarData, setCachedCarData] = useState<CarItem[] | null>(null);
   const searchAddresses = useAction(api.cars.searchAddresses);
   const resolveAddressDetails = useAction(api.cars.resolveAddressDetails);
   const [placesSessionToken] = useState(
@@ -161,17 +168,48 @@ export default function SearchScreen() {
   const isDateRangeValid =
     new Date(startIso).getTime() <= new Date(endIso).getTime();
 
-  const cars = useQuery(
-    api.cars.listCurrentlyAvailableCars as never,
+  const paginatedArgs =
     hasValidCenter && isDateRangeValid
-      ? ({ startDate: startIso, endDate: endIso } as never)
-      : "skip",
-  );
-  const isLoading = hasValidCenter && isDateRangeValid && cars === undefined;
+      ? ({
+          startDate: startIso,
+          endDate: endIso,
+          centerLat: searchCenter.lat,
+          centerLng: searchCenter.lng,
+          radiusKm: DEFAULT_SEARCH_RADIUS_KM,
+        } as const)
+      : "skip";
+  const searchCacheKey = useMemo(() => {
+    if (!hasValidCenter || !isDateRangeValid) return null;
+    return buildSearchResultsCacheKey({
+      startDate: startIso,
+      endDate: endIso,
+      centerLat: searchCenter.lat,
+      centerLng: searchCenter.lng,
+      radiusKm: DEFAULT_SEARCH_RADIUS_KM,
+    });
+  }, [endIso, hasValidCenter, isDateRangeValid, searchCenter.lat, searchCenter.lng, startIso]);
 
-  const carData = useMemo<CarItem[]>(
+  const {
+    results: paginatedCars,
+    status: paginationStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.cars.listCurrentlyAvailableCarsPaginated as never,
+    paginatedArgs as never,
+    { initialNumItems: SEARCH_PAGE_SIZE },
+  );
+  const hasCachedSnapshot = cachedCarData !== null;
+  const isLoading =
+    hasValidCenter &&
+    isDateRangeValid &&
+    paginationStatus === "LoadingFirstPage" &&
+    !hasCachedSnapshot;
+  const isLoadingMore = paginationStatus === "LoadingMore";
+  const canLoadMore = paginationStatus === "CanLoadMore";
+
+  const liveCarData = useMemo<CarItem[]>(
     () =>
-      (cars as any[] | undefined)?.map((car: any) => ({
+      (paginatedCars as any[] | undefined)?.map((car: any) => ({
         id: car._id,
         title: car.title,
         make: car.make,
@@ -184,8 +222,42 @@ export default function SearchScreen() {
         isCarVerified: car.isCarVerified,
         location: car.location,
       })) ?? [],
-    [cars],
+    [paginatedCars],
   );
+  const carData = useMemo(() => {
+    if (liveCarData.length > 0) return liveCarData;
+    if (paginationStatus === "LoadingFirstPage" && cachedCarData) return cachedCarData;
+    return liveCarData;
+  }, [cachedCarData, liveCarData, paginationStatus]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!searchCacheKey) {
+      setCachedCarData(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Reset snapshot when query key changes so we don't show results from a different location/date.
+    setCachedCarData(null);
+    void (async () => {
+      const cached = await loadSearchResultsCache(searchCacheKey);
+      if (cancelled) return;
+      setCachedCarData(cached);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchCacheKey]);
+
+  useEffect(() => {
+    if (!searchCacheKey) return;
+    if (paginationStatus === "LoadingFirstPage") return;
+    void saveSearchResultsCache(searchCacheKey, liveCarData);
+  }, [liveCarData, paginationStatus, searchCacheKey]);
 
   const makeText = advancedFilters.make.trim().toLowerCase();
   const modelText = advancedFilters.model.trim().toLowerCase();
@@ -200,15 +272,6 @@ export default function SearchScreen() {
 
   const filteredCars = useMemo(() => {
     return carData.filter((car) => {
-      if (typeof car.location?.lat !== "number" || typeof car.location?.lng !== "number") {
-        return false;
-      }
-
-      const distanceKm = haversineKm(searchCenter.lat, searchCenter.lng, car.location.lat, car.location.lng);
-      if (distanceKm > DEFAULT_SEARCH_RADIUS_KM) {
-        return false;
-      }
-
       const matchesMake = makeText.length === 0 || car.make.toLowerCase().includes(makeText);
       const matchesModel = modelText.length === 0 || car.model.toLowerCase().includes(modelText);
       const matchesMinYear = !hasMinYear || car.year >= minYear;
@@ -322,6 +385,11 @@ export default function SearchScreen() {
   const handleCarCardPress = (carId: string) => {
     setSelectedCarId(carId);
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  };
+
+  const handleLoadMoreCars = () => {
+    if (!canLoadMore || isLoadingMore) return;
+    loadMore(SEARCH_PAGE_SIZE);
   };
 
   const searchLocation = async () => {
@@ -522,6 +590,8 @@ export default function SearchScreen() {
               startDate={startDate}
               endDate={endDate}
               paddingBottom={96}
+              onEndReached={handleLoadMoreCars}
+              isLoadingMore={isLoadingMore}
             />
           )}
         </View>
@@ -538,6 +608,8 @@ export default function SearchScreen() {
                 startDate={startDate}
                 endDate={endDate}
                 paddingBottom={24}
+                onEndReached={handleLoadMoreCars}
+                isLoadingMore={isLoadingMore}
               />
             </View>
             <View className="w-[44%] min-w-[360px]">

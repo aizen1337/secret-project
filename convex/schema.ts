@@ -30,7 +30,9 @@ export default defineSchema({
     stripePayoutsEnabled: v.optional(v.boolean()),
     updatedAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_user", ["userId"]),
+  })
+    .index("by_user", ["userId"])
+    .index("by_stripe_connect_account_id", ["stripeConnectAccountId"]),
 
   cars: defineTable({
     hostId: v.id("hosts"),
@@ -71,6 +73,22 @@ export default defineSchema({
     .index("by_host", ["hostId"])
     .index("by_city", ["location.city"]),
 
+  recent_location_searches: defineTable({
+    userId: v.id("users"),
+    placeId: v.string(),
+    description: v.string(),
+    city: v.string(),
+    country: v.string(),
+    lat: v.number(),
+    lng: v.number(),
+    searchCount: v.number(),
+    lastSearchedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_lastSearched", ["userId", "lastSearchedAt"])
+    .index("by_user_place", ["userId", "placeId"]),
+
   bookings: defineTable({
     carId: v.id("cars"),
     renterId: v.id("users"),
@@ -93,7 +111,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_renter", ["renterId"])
-    .index("by_car", ["carId"]),
+    .index("by_car", ["carId"])
+    .index("by_status_startDate", ["status", "startDate"]),
 
   payments: defineTable({
     bookingId: v.id("bookings"),
@@ -166,8 +185,10 @@ export default defineSchema({
   })
     .index("by_checkout_session", ["stripeCheckoutSessionId"])
     .index("by_payment_intent", ["stripePaymentIntentId"])
+    .index("by_charge_id", ["stripeChargeId"])
     .index("by_booking", ["bookingId"])
     .index("by_host_payout_status", ["hostId", "payoutStatus"])
+    .index("by_status_updated_at", ["status", "updatedAt"])
     .index("by_release_at", ["payoutStatus", "releaseAt"]),
 
   reviews: defineTable({
@@ -240,6 +261,34 @@ export default defineSchema({
     .index("by_target", ["targetUserId"])
     .index("by_target_direction", ["targetUserId", "direction"])
     .index("by_booking_author", ["bookingId", "authorUserId"]),
+
+  booking_chats: defineTable({
+    bookingId: v.id("bookings"),
+    hostUserId: v.id("users"),
+    renterUserId: v.id("users"),
+    hostUnreadCount: v.number(),
+    renterUnreadCount: v.number(),
+    hostLastReadAt: v.optional(v.number()),
+    renterLastReadAt: v.optional(v.number()),
+    lastMessageAt: v.optional(v.number()),
+    lastMessageSenderId: v.optional(v.id("users")),
+    lastMessagePreview: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_booking", ["bookingId"])
+    .index("by_host_updated", ["hostUserId", "updatedAt"])
+    .index("by_renter_updated", ["renterUserId", "updatedAt"]),
+
+  booking_messages: defineTable({
+    bookingId: v.id("bookings"),
+    senderUserId: v.id("users"),
+    text: v.optional(v.string()),
+    imageStorageIds: v.optional(v.array(v.id("_storage"))),
+    createdAt: v.number(),
+  })
+    .index("by_booking_createdAt", ["bookingId", "createdAt"])
+    .index("by_sender", ["senderUserId"]),
 
   deposit_cases: defineTable({
     paymentId: v.id("payments"),

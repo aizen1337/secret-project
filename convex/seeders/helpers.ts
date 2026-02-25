@@ -69,7 +69,7 @@ export async function seedBookingsInternal(ctx: any) {
 export async function seedReviewsInternal(ctx: any) {
   const booking = await ctx.db
     .query("bookings")
-    .filter(q => q.eq(q.field("status"), "completed"))
+    .filter((q: any) => q.eq(q.field("status"), "completed"))
     .first();
 
   if (!booking) return;

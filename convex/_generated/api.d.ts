@@ -8,18 +8,23 @@
  * @module
  */
 
+import type * as bookingChat from "../bookingChat.js";
 import type * as bookingReviews from "../bookingReviews.js";
 import type * as bookings from "../bookings.js";
 import type * as bookingsLifecycle from "../bookingsLifecycle.js";
 import type * as cars from "../cars.js";
 import type * as depositCases from "../depositCases.js";
 import type * as env from "../env.js";
+import type * as guards_adminGuard from "../guards/adminGuard.js";
 import type * as guards_bookingGuard from "../guards/bookingGuard.js";
+import type * as guards_redirectUrlGuard from "../guards/redirectUrlGuard.js";
 import type * as guards_renterVerificationGuard from "../guards/renterVerificationGuard.js";
 import type * as hostMapper from "../hostMapper.js";
 import type * as http from "../http.js";
 import type * as identity from "../identity.js";
 import type * as paymentsOrchestrator from "../paymentsOrchestrator.js";
+import type * as recentSearches from "../recentSearches.js";
+import type * as seeders_absurdListings from "../seeders/absurdListings.js";
 import type * as seeders_bookings from "../seeders/bookings.js";
 import type * as seeders_cars from "../seeders/cars.js";
 import type * as seeders_helpers from "../seeders/helpers.js";
@@ -44,18 +49,23 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  bookingChat: typeof bookingChat;
   bookingReviews: typeof bookingReviews;
   bookings: typeof bookings;
   bookingsLifecycle: typeof bookingsLifecycle;
   cars: typeof cars;
   depositCases: typeof depositCases;
   env: typeof env;
+  "guards/adminGuard": typeof guards_adminGuard;
   "guards/bookingGuard": typeof guards_bookingGuard;
+  "guards/redirectUrlGuard": typeof guards_redirectUrlGuard;
   "guards/renterVerificationGuard": typeof guards_renterVerificationGuard;
   hostMapper: typeof hostMapper;
   http: typeof http;
   identity: typeof identity;
   paymentsOrchestrator: typeof paymentsOrchestrator;
+  recentSearches: typeof recentSearches;
+  "seeders/absurdListings": typeof seeders_absurdListings;
   "seeders/bookings": typeof seeders_bookings;
   "seeders/cars": typeof seeders_cars;
   "seeders/helpers": typeof seeders_helpers;

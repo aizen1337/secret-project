@@ -5,7 +5,7 @@ export async function mapHost(ctx: any) {
 
   let host = await ctx.db
     .query("hosts")
-    .withIndex("by_user", q => q.eq("userId", user._id))
+    .withIndex("by_user", (q: any) => q.eq("userId", user._id))
     .first();
 
   if (!host) {

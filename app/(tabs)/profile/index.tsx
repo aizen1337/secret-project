@@ -104,6 +104,7 @@ export default function ProfileScreen() {
     { icon: "shield-outline", label: t("profile.menu.privacy"), href: "/profile/privacy" },
     { icon: "star-outline", label: t("profile.menu.reviews"), href: "/profile/reviews" },
     { icon: "card-outline", label: t("profile.menu.payments"), href: "/profile/payments" },
+    { icon: "grid-outline", label: t("profile.menu.hostDashboard"), href: "/dashboard" },
   ];
 
   return (

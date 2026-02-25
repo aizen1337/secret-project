@@ -7,7 +7,7 @@ export async function mapClerkUser(ctx: any) {
 
   let user = await ctx.db
     .query("users")
-    .withIndex("by_clerk_id", q => q.eq("clerkUserId", clerkUserId))
+    .withIndex("by_clerk_id", (q: any) => q.eq("clerkUserId", clerkUserId))
     .first();
 
   if (!user) {

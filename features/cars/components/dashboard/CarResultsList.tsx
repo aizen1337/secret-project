@@ -15,6 +15,8 @@ type CarResultsListProps = {
   startDate?: string;
   endDate?: string;
   paddingBottom: number;
+  onEndReached?: () => void;
+  isLoadingMore?: boolean;
 };
 
 export function CarResultsList({
@@ -25,6 +27,8 @@ export function CarResultsList({
   startDate,
   endDate,
   paddingBottom,
+  onEndReached,
+  isLoadingMore = false,
 }: CarResultsListProps) {
   const { t } = useTranslation();
   return (
@@ -48,6 +52,15 @@ export function CarResultsList({
           </Text>
         </View>
       }
+      ListFooterComponent={
+        isLoadingMore ? (
+          <View className="py-4">
+            <Text className="text-center text-xs text-muted-foreground">{t("common.loading")}</Text>
+          </View>
+        ) : null
+      }
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.55}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom }}
     />

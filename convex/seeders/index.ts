@@ -4,10 +4,12 @@ import {
   seedBookingsInternal,
   seedReviewsInternal,
 } from "./helpers";
+import { assertAdminFromClerkRoleClaim } from "../guards/adminGuard";
 
 export const seedAll = mutation({
   args: {},
   async handler(ctx) {
+    await assertAdminFromClerkRoleClaim(ctx);
     await seedCarsInternal(ctx);
     await seedBookingsInternal(ctx);
     await seedReviewsInternal(ctx);

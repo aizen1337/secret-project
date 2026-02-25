@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo, useState } from "react";
 import { ScrollView, View, Text, Pressable } from "react-native";
 import { useColorScheme } from "nativewind";
 import { Ionicons } from "@expo/vector-icons";
@@ -56,25 +57,68 @@ export default function ProfileReviewsScreen() {
   const router = useRouter();
   const mode = resolveThemeMode(useColorScheme());
   const { isLoaded, isSignedIn } = useAuth();
+  const [activeTab, setActiveTab] = useState<"renter" | "host">("renter");
 
   const convexUser = useQuery(api.users.getCurrentUser);
+  const renterVerification = useQuery(
+    api.verification.getMyRenterVerificationStatus as any,
+    isSignedIn ? {} : "skip",
+  ) as { enabled?: boolean; readyToBook?: boolean } | undefined;
+  const hostPayoutStatus = useQuery(
+    api.users.getHostPayoutStatus,
+    isSignedIn ? {} : "skip",
+  ) as { hostVerified?: boolean } | undefined;
+
+  const renterVerified = Boolean(renterVerification?.enabled && renterVerification?.readyToBook);
+  const hostVerified = Boolean(hostPayoutStatus?.hostVerified);
+
+  const canViewRenterTab = renterVerified;
+  const canViewHostTab = hostVerified;
+
+  const isDataLoading =
+    isSignedIn &&
+    (convexUser === undefined || renterVerification === undefined || hostPayoutStatus === undefined);
+
+  useEffect(() => {
+    if (activeTab === "renter" && !canViewRenterTab && canViewHostTab) {
+      setActiveTab("host");
+      return;
+    }
+    if (activeTab === "host" && !canViewHostTab && canViewRenterTab) {
+      setActiveTab("renter");
+    }
+  }, [activeTab, canViewHostTab, canViewRenterTab]);
+
   const renterReviews = useQuery(
     api.bookingReviews.listReviewsForUser as any,
-    convexUser?._id ? { userId: convexUser._id, direction: "host_to_renter", limit: 20 } : "skip",
+    convexUser?._id && canViewRenterTab
+      ? { userId: convexUser._id, direction: "host_to_renter", limit: 20 }
+      : "skip",
   ) as ReviewEntry[] | undefined;
   const renterSummary = useQuery(
     api.bookingReviews.getUserReviewSummary as any,
-    convexUser?._id ? { userId: convexUser._id, direction: "host_to_renter" } : "skip",
+    convexUser?._id && canViewRenterTab
+      ? { userId: convexUser._id, direction: "host_to_renter" }
+      : "skip",
   ) as { count: number; average: number } | undefined;
 
   const hostReviews = useQuery(
     api.bookingReviews.listReviewsForUser as any,
-    convexUser?._id ? { userId: convexUser._id, direction: "renter_to_host", limit: 20 } : "skip",
+    convexUser?._id && canViewHostTab
+      ? { userId: convexUser._id, direction: "renter_to_host", limit: 20 }
+      : "skip",
   ) as ReviewEntry[] | undefined;
   const hostSummary = useQuery(
     api.bookingReviews.getUserReviewSummary as any,
-    convexUser?._id ? { userId: convexUser._id, direction: "renter_to_host" } : "skip",
+    convexUser?._id && canViewHostTab
+      ? { userId: convexUser._id, direction: "renter_to_host" }
+      : "skip",
   ) as { count: number; average: number } | undefined;
+
+  const noVerifiedRoles = useMemo(
+    () => !canViewRenterTab && !canViewHostTab,
+    [canViewHostTab, canViewRenterTab],
+  );
 
   if (!isLoaded) {
     return (
@@ -101,6 +145,26 @@ export default function ProfileReviewsScreen() {
     );
   }
 
+  if (isDataLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-background">
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-base text-muted-foreground">{t("common.loading")}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const renderLockedState = (role: "renter" | "host") => (
+    <View className="bg-card rounded-xl border border-border p-4 mt-4">
+      <Text className="text-sm text-muted-foreground">
+        {role === "renter"
+          ? t("profile.reviews.renterVerificationRequired")
+          : t("profile.reviews.hostVerificationRequired")}
+      </Text>
+    </View>
+  );
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="px-4 py-3 border-b border-border flex-row items-center">
@@ -111,27 +175,86 @@ export default function ProfileReviewsScreen() {
       </View>
 
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-        <ReviewSection
-          title={t("profile.reviews.renterTitle")}
-          summary={t("profile.reviews.renterSummary", {
-            count: renterSummary?.count ?? 0,
-            average: renterSummary?.average ?? 0,
-          })}
-          emptyLabel={t("profile.reviews.renterEmpty")}
-          fallbackAuthor={t("carDetail.host")}
-          rows={renterReviews}
-        />
+        <View className="flex-row bg-secondary rounded-xl p-1 mb-4">
+          <Pressable
+            onPress={() => {
+              if (canViewRenterTab) {
+                setActiveTab("renter");
+              }
+            }}
+            disabled={!canViewRenterTab}
+            className={`flex-1 py-3 rounded-lg ${
+              activeTab === "renter" ? "bg-card" : ""
+            } ${!canViewRenterTab ? "opacity-50" : ""}`}
+          >
+            <Text
+              className={`text-center font-medium ${
+                activeTab === "renter" ? "text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              {t("profile.reviews.tabs.renter")}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              if (canViewHostTab) {
+                setActiveTab("host");
+              }
+            }}
+            disabled={!canViewHostTab}
+            className={`flex-1 py-3 rounded-lg ${
+              activeTab === "host" ? "bg-card" : ""
+            } ${!canViewHostTab ? "opacity-50" : ""}`}
+          >
+            <Text
+              className={`text-center font-medium ${
+                activeTab === "host" ? "text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              {t("profile.reviews.tabs.host")}
+            </Text>
+          </Pressable>
+        </View>
 
-        <ReviewSection
-          title={t("profile.reviews.hostTitle")}
-          summary={t("profile.reviews.hostSummary", {
-            count: hostSummary?.count ?? 0,
-            average: hostSummary?.average ?? 0,
-          })}
-          emptyLabel={t("profile.reviews.hostEmpty")}
-          fallbackAuthor={t("profile.badges.renter")}
-          rows={hostReviews}
-        />
+        {noVerifiedRoles ? (
+          <View className="bg-card rounded-xl border border-border p-4">
+            <Text className="text-sm text-muted-foreground">{t("profile.reviews.noVerifiedRoles")}</Text>
+          </View>
+        ) : null}
+
+        {!noVerifiedRoles && activeTab === "renter" ? (
+          canViewRenterTab ? (
+            <ReviewSection
+              title={t("profile.reviews.renterTitle")}
+              summary={t("profile.reviews.renterSummary", {
+                count: renterSummary?.count ?? 0,
+                average: renterSummary?.average ?? 0,
+              })}
+              emptyLabel={t("profile.reviews.renterEmpty")}
+              fallbackAuthor={t("carDetail.host")}
+              rows={renterReviews}
+            />
+          ) : (
+            renderLockedState("renter")
+          )
+        ) : null}
+
+        {!noVerifiedRoles && activeTab === "host" ? (
+          canViewHostTab ? (
+            <ReviewSection
+              title={t("profile.reviews.hostTitle")}
+              summary={t("profile.reviews.hostSummary", {
+                count: hostSummary?.count ?? 0,
+                average: hostSummary?.average ?? 0,
+              })}
+              emptyLabel={t("profile.reviews.hostEmpty")}
+              fallbackAuthor={t("profile.badges.renter")}
+              rows={hostReviews}
+            />
+          ) : (
+            renderLockedState("host")
+          )
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

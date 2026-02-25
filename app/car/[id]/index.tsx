@@ -61,8 +61,8 @@ export default function CarDetailScreen() {
   const offer = useQuery(api.cars.getCarOfferById, carId ? { carId } : "skip");
   const createCheckoutSession = useAction(api.stripe.createCheckoutSession);
   const car = offer?.car;
-  const host = offer?.host;
-  const hostUser = offer?.hostUser;
+  const host = offer?.hostPublic;
+  const hostUser = offer?.hostUserPublic;
 
   const today = useMemo(() => new Date(), []);
   const defaultEnd = useMemo(() => {
@@ -135,10 +135,23 @@ export default function CarDetailScreen() {
     : null;
   const isOwnListing = Boolean(
     currentUser?._id &&
-      host?.userId &&
-      String(currentUser._id) === String(host.userId),
+      hostUser?.id &&
+      String(currentUser._id) === String(hostUser.id),
   );
   const isBookDisabled = isCreatingCheckout || !dateRangeValid || isOwnListing;
+  const hostUserId = hostUser?.id ? String(hostUser.id) : "";
+
+  const handleOpenHostProfile = () => {
+    if (!hostUserId) return;
+    if (!isSignedIn) {
+      router.push("/sign-in");
+      return;
+    }
+    router.push({
+      pathname: "/user/[userId]",
+      params: { userId: hostUserId, role: "host" },
+    } as any);
+  };
 
   const handleBook = async () => {
     if (isOwnListing) {
@@ -158,14 +171,14 @@ export default function CarDetailScreen() {
     try {
       const webOrigin = isWeb && typeof window !== "undefined" ? window.location.origin : null;
       const successUrl = webOrigin
-        ? `${webOrigin}/trips?checkout=success`
-        : ExpoLinking.createURL("/trips?checkout=success");
+        ? `${webOrigin}/trips?checkout=success&session_id={CHECKOUT_SESSION_ID}`
+        : ExpoLinking.createURL("/trips?checkout=success&session_id={CHECKOUT_SESSION_ID}");
       const cancelUrl = webOrigin
-        ? `${webOrigin}/car/${car._id}?checkout=cancelled`
-        : ExpoLinking.createURL(`/car/${car._id}?checkout=cancelled`);
+        ? `${webOrigin}/car/${car.id}?checkout=cancelled`
+        : ExpoLinking.createURL(`/car/${car.id}?checkout=cancelled`);
 
       const checkout = await createCheckoutSession({
-        carId: car._id,
+        carId: car.id as Id<"cars">,
         successUrl,
         cancelUrl,
         startDate: startIso,
@@ -390,11 +403,11 @@ export default function CarDetailScreen() {
           </View>
 
           <Text className="text-lg font-semibold text-foreground mb-3">{t("carDetail.host")}</Text>
-          <View className="bg-card p-4 rounded-xl border border-border mb-6">
-            <View className="flex-row items-center">
-              {hostUser?.imageUrl ? (
-                <Image
-                  source={{ uri: hostUser.imageUrl }}
+            <View className="bg-card p-4 rounded-xl border border-border mb-6">
+              <View className="flex-row items-center">
+                {hostUser?.imageUrl ? (
+                  <Image
+                    source={{ uri: hostUser.imageUrl }}
                   className="w-12 h-12 rounded-full"
                   resizeMode="cover"
                 />
@@ -402,27 +415,40 @@ export default function CarDetailScreen() {
                 <View className="w-12 h-12 rounded-full bg-secondary items-center justify-center">
                   <Text className="text-base font-semibold text-foreground">{hostInitial}</Text>
                 </View>
-              )}
-              <View className="ml-3 flex-1">
-                <View className="flex-row items-center">
-                  <Text className="text-base font-semibold text-foreground">
-                    {t("carDetail.hostedBy", { name: hostUser?.name ?? t("carDetail.host") })}
-                  </Text>
-                  {host?.isVerified ? (
-                    <View className="ml-2 px-2 py-1 bg-verified-bg rounded-full">
-                      <Text className="text-[10px] font-semibold text-verified-fg">{t("carDetail.verifiedHost")}</Text>
-                    </View>
-                  ) : null}
+                )}
+                <View className="ml-3 flex-1">
+                  <View className="flex-row items-center">
+                    {hostUserId ? (
+                      <Pressable onPress={handleOpenHostProfile}>
+                        <Text className="text-base font-semibold text-foreground">
+                          {t("carDetail.hostedBy", { name: hostUser?.name ?? t("carDetail.host") })}
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <Text className="text-base font-semibold text-foreground">
+                        {t("carDetail.hostedBy", { name: hostUser?.name ?? t("carDetail.host") })}
+                      </Text>
+                    )}
+                    {host?.isVerified ? (
+                      <View className="ml-2 px-2 py-1 bg-verified-bg rounded-full">
+                        <Text className="text-[10px] font-semibold text-verified-fg">{t("carDetail.verifiedHost")}</Text>
+                      </View>
+                    ) : null}
                 </View>
                 <Text className="text-xs text-muted-foreground mt-1">
                   {hostMemberSince ? t("carDetail.memberSince", { date: hostMemberSince }) : t("carDetail.hostAccount")}
                 </Text>
               </View>
+              </View>
+              <Text className="text-sm text-muted-foreground mt-3">
+                {host?.bio || t("carDetail.hostBioFallback")}
+              </Text>
+              {hostUserId ? (
+                <Pressable onPress={handleOpenHostProfile} className="mt-3 self-start">
+                  <Text className="text-xs font-semibold text-primary">{t("userProfile.viewProfile")}</Text>
+                </Pressable>
+              ) : null}
             </View>
-            <Text className="text-sm text-muted-foreground mt-3">
-              {host?.bio || t("carDetail.hostBioFallback")}
-            </Text>
-          </View>
 
           <Text className="text-lg font-semibold text-foreground mb-3">{t("carDetail.rules.title")}</Text>
           <View className="bg-card p-4 rounded-xl border border-border mb-6 gap-2">

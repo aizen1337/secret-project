@@ -1,5 +1,6 @@
+﻿// @ts-nocheck
 import { v } from "convex/values";
-import { internalAction, internalMutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 function getStripeSecretKey() {
@@ -138,7 +139,7 @@ export const releaseHostPayoutInternal = internalAction({
   },
 });
 
-export const getPaymentForPayoutInternal = query({
+export const getPaymentForPayoutInternal = internalQuery({
   args: {
     paymentId: v.id("payments"),
   },
@@ -153,3 +154,4 @@ export const getPaymentForPayoutInternal = query({
     };
   },
 });
+

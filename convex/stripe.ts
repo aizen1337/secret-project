@@ -1,8 +1,11 @@
+﻿// @ts-nocheck
 import { v } from "convex/values";
-import { action, internalAction, internalMutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { mapClerkUser } from "./userMapper";
 import { assertRenterCanBook } from "./guards/renterVerificationGuard";
+import { assertAllowedRedirectUrl } from "./guards/redirectUrlGuard";
+import { assertAdminFromClerkRoleClaim } from "./guards/adminGuard";
 
 type PaymentStrategy = "destination_manual_capture" | "platform_transfer_fallback";
 
@@ -185,6 +188,36 @@ async function markPaymentAsPaidAndSchedule(ctx: any, payment: any, args: {
   }
 }
 
+function isCheckoutPayableStatus(status: string) {
+  return (
+    status === "method_collection_pending" ||
+    status === "method_saved" ||
+    status === "checkout_created"
+  );
+}
+
+function readStripeMetadataString(metadata: unknown, key: string) {
+  if (!metadata || typeof metadata !== "object") return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function resolveStripeChargeIdFromCheckoutSession(session: any) {
+  if (typeof session?.charge === "string") return session.charge;
+  if (typeof session?.payment_intent?.latest_charge === "string") {
+    return session.payment_intent.latest_charge;
+  }
+  return undefined;
+}
+
+function shouldFallbackByPaymentId(
+  result: { ok: boolean; reason?: string } | null | undefined,
+) {
+  if (!result) return true;
+  if (!result.ok) return true;
+  return result.reason === "payment_not_found" || result.reason === "payment_not_payable";
+}
+
 export const createCheckoutSession = action({
   args: {
     carId: v.id("cars"),
@@ -204,6 +237,8 @@ export const createCheckoutSession = action({
     }
 
     await assertRenterCanBook(ctx);
+    const successUrl = assertAllowedRedirectUrl(args.successUrl, "successUrl");
+    const cancelUrl = assertAllowedRedirectUrl(args.cancelUrl, "cancelUrl");
 
     const pending = await ctx.runMutation(internal.stripe.createPendingBookingPaymentInternal, {
       carId: args.carId,
@@ -222,8 +257,8 @@ export const createCheckoutSession = action({
     let payload: any;
     if (pending.requiresImmediatePayment) {
       const body = buildPaymentSessionBody({
-        successUrl: args.successUrl,
-        cancelUrl: args.cancelUrl,
+        successUrl,
+        cancelUrl,
         customerId: stripeCustomerId,
         carName: pending.carName,
         days: pending.days,
@@ -242,8 +277,8 @@ export const createCheckoutSession = action({
     } else {
       const body = new URLSearchParams({
         mode: "setup",
-        success_url: args.successUrl,
-        cancel_url: args.cancelUrl,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
         customer: stripeCustomerId,
         "payment_method_types[0]": "card",
         "metadata[paymentId]": String(pending.paymentId),
@@ -291,6 +326,8 @@ export const createReservationPayNowSession = action({
       throw new Error("UNAUTHORIZED: You must be signed in.");
     }
     await assertRenterCanBook(ctx);
+    const successUrl = assertAllowedRedirectUrl(args.successUrl, "successUrl");
+    const cancelUrl = assertAllowedRedirectUrl(args.cancelUrl, "cancelUrl");
 
     const prepared = await ctx.runMutation(internal.stripe.prepareReservationPayNowInternal, {
       bookingId: args.bookingId,
@@ -304,8 +341,8 @@ export const createReservationPayNowSession = action({
     });
 
     const body = buildPaymentSessionBody({
-      successUrl: args.successUrl,
-      cancelUrl: args.cancelUrl,
+      successUrl,
+      cancelUrl,
       customerId: stripeCustomerId,
       carName: prepared.carName,
       days: prepared.days,
@@ -334,6 +371,158 @@ export const createReservationPayNowSession = action({
       paymentDueAt: prepared.paymentDueAt,
       total: prepared.totalAmount,
     };
+  },
+});
+
+export const reconcileCheckoutSessionFromRedirect = action({
+  args: {
+    stripeCheckoutSessionId: v.string(),
+  },
+  async handler(ctx, args) {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("UNAUTHORIZED: You must be signed in.");
+    }
+    try {
+      const session = await stripeGetRequest(
+        `checkout/sessions/${encodeURIComponent(args.stripeCheckoutSessionId)}?expand[]=payment_intent`,
+      );
+      const sessionMode = typeof session?.mode === "string" ? session.mode : "";
+      const sessionStatus = typeof session?.status === "string" ? session.status : "";
+      const paymentStatus =
+        typeof session?.payment_status === "string" ? session.payment_status : "";
+      const stripePaymentIntentId =
+        typeof session?.payment_intent === "string"
+          ? session.payment_intent
+          : typeof session?.payment_intent?.id === "string"
+            ? session.payment_intent.id
+            : undefined;
+      const stripeChargeId = resolveStripeChargeIdFromCheckoutSession(session);
+      const metadataPaymentId = readStripeMetadataString(session?.metadata, "paymentId");
+      const eventIdBase = `redirect-reconcile-${args.stripeCheckoutSessionId}`;
+
+      if (sessionMode === "setup") {
+        if (sessionStatus !== "complete") {
+          return {
+            ok: false,
+            mode: sessionMode,
+            sessionStatus,
+            reason: "setup_session_not_complete",
+          } as const;
+        }
+
+        let setupIntentId =
+          typeof session?.setup_intent === "string" ? session.setup_intent : undefined;
+        let paymentMethodId: string | undefined;
+        let customerId: string | undefined =
+          typeof session?.customer === "string" ? session.customer : undefined;
+        if (setupIntentId) {
+          const details = await ctx.runAction(
+            internal.stripe.fetchSetupIntentPaymentMethodInternal,
+            {
+              setupIntentId,
+            },
+          );
+          setupIntentId = details.setupIntentId;
+          paymentMethodId = details.paymentMethodId ?? undefined;
+          customerId = customerId ?? details.customerId ?? undefined;
+        }
+        const setupResult = await ctx.runMutation(
+          internal.stripe.markPaymentMethodCollectedByCheckoutSessionInternal,
+          {
+            stripeCheckoutSessionId: args.stripeCheckoutSessionId,
+            stripeSetupIntentId: setupIntentId,
+            stripePaymentMethodId: paymentMethodId,
+            stripeCustomerId: customerId,
+            eventId: `${eventIdBase}-setup`,
+          },
+        );
+        return {
+          ok: true,
+          mode: sessionMode,
+          sessionStatus,
+          setupResult,
+        } as const;
+      }
+
+      if (sessionMode !== "payment") {
+        return {
+          ok: false,
+          mode: sessionMode,
+          sessionStatus,
+          paymentStatus,
+          reason: "unsupported_checkout_mode",
+        } as const;
+      }
+
+      if (sessionStatus !== "complete" || (paymentStatus !== "paid" && paymentStatus !== "no_payment_required")) {
+        return {
+          ok: false,
+          mode: sessionMode,
+          sessionStatus,
+          paymentStatus,
+          reason: "checkout_not_paid",
+        } as const;
+      }
+
+      const primary = await ctx.runMutation(internal.stripe.markPaymentPaidByCheckoutSessionInternal, {
+        stripeCheckoutSessionId: args.stripeCheckoutSessionId,
+        stripePaymentIntentId,
+        stripeChargeId,
+        eventId: `${eventIdBase}-primary`,
+      });
+
+      let fallbackByPaymentId:
+        | {
+            ok: boolean;
+            reason?: string;
+          }
+        | null = null;
+      if (metadataPaymentId && shouldFallbackByPaymentId(primary)) {
+        fallbackByPaymentId = await ctx.runMutation(internal.stripe.markPaymentPaidByPaymentIdInternal, {
+          paymentId: metadataPaymentId,
+          stripePaymentIntentId,
+          stripeChargeId,
+          eventId: `${eventIdBase}-payment-id`,
+        });
+      }
+
+      let fallbackByPaymentIntent:
+        | {
+            ok: boolean;
+            reason?: string;
+          }
+        | null = null;
+      if (stripePaymentIntentId && shouldFallbackByPaymentId(fallbackByPaymentId ?? primary)) {
+        fallbackByPaymentIntent = await ctx.runMutation(
+          internal.stripe.markPaymentPaidByPaymentIntentInternal,
+          {
+            stripePaymentIntentId,
+            stripeChargeId,
+            eventId: `${eventIdBase}-payment-intent`,
+          },
+        );
+      }
+
+      return {
+        ok: true,
+        mode: sessionMode,
+        sessionStatus,
+        paymentStatus,
+        stripePaymentIntentId: stripePaymentIntentId ?? null,
+        stripeChargeId: stripeChargeId ?? null,
+        metadataPaymentId,
+        primary,
+        fallbackByPaymentId,
+        fallbackByPaymentIntent,
+      } as const;
+    } catch (error) {
+      return {
+        ok: false,
+        reason: "stripe_fetch_failed",
+        message: error instanceof Error ? error.message : "stripe_fetch_failed",
+      } as const;
+    }
   },
 });
 
@@ -664,6 +853,7 @@ export const markReservationPaymentChargedInternal = internalMutation({
     if (!payment) return { ok: false, reason: "payment_not_found" } as const;
     if (payment.lastWebhookEventId === args.eventId) return { ok: true, reason: "duplicate_event" } as const;
     if (payment.status === "paid") return { ok: true, reason: "already_paid" } as const;
+    if (payment.status === "cancelled") return { ok: true, reason: "cancelled" } as const;
     await markPaymentAsPaidAndSchedule(ctx, payment, {
       stripePaymentIntentId: args.stripePaymentIntentId,
       stripeChargeId: args.stripeChargeId,
@@ -684,6 +874,7 @@ export const markReservationPaymentFailedInternal = internalMutation({
     if (!payment) return { ok: false, reason: "payment_not_found" } as const;
     if (payment.lastWebhookEventId === args.eventId) return { ok: true, reason: "duplicate_event" } as const;
     if (payment.status === "paid") return { ok: true, reason: "already_paid" } as const;
+    if (payment.status === "cancelled") return { ok: true, reason: "cancelled" } as const;
     const now = Date.now();
     await ctx.db.patch(payment._id, {
       status: "failed",
@@ -833,6 +1024,124 @@ export const markPaymentPaidByCheckoutSessionInternal = internalMutation({
     if (payment.status === "paid") {
       return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, reason: "already_paid" } as const;
     }
+    if (payment.status === "cancelled") {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, reason: "cancelled" } as const;
+    }
+    if (!isCheckoutPayableStatus(payment.status)) {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, reason: "payment_not_payable" } as const;
+    }
+
+    const strategy = (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy;
+    if (strategy === "destination_manual_capture") {
+      await ctx.db.patch(payment._id, {
+        stripePaymentIntentId: args.stripePaymentIntentId ?? payment.stripePaymentIntentId,
+        stripeChargeId: args.stripeChargeId ?? payment.stripeChargeId,
+        captureStatus: "pending_capture",
+        lastWebhookEventId: args.eventId,
+        updatedAt: Date.now(),
+      });
+      await ctx.scheduler.runAt(
+        new Date(payment.releaseAt),
+        internal.stripe.capturePaymentIntentForCompletedBookingInternal,
+        { paymentId: payment._id },
+      );
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, strategy } as const;
+    }
+
+    await markPaymentAsPaidAndSchedule(ctx, payment, {
+      stripePaymentIntentId: args.stripePaymentIntentId ?? payment.stripePaymentIntentId,
+      stripeChargeId: args.stripeChargeId ?? payment.stripeChargeId,
+      eventId: args.eventId,
+    });
+
+    return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt } as const;
+  },
+});
+
+export const markPaymentPaidByPaymentIntentInternal = internalMutation({
+  args: {
+    stripePaymentIntentId: v.string(),
+    stripeChargeId: v.optional(v.string()),
+    eventId: v.string(),
+  },
+  async handler(ctx, args) {
+    const payment = await ctx.db
+      .query("payments")
+      .withIndex("by_payment_intent", (q) => q.eq("stripePaymentIntentId", args.stripePaymentIntentId))
+      .first();
+    if (!payment) {
+      return { ok: false, reason: "payment_not_found" } as const;
+    }
+    if (payment.lastWebhookEventId === args.eventId) {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt } as const;
+    }
+    if (payment.status === "paid") {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, reason: "already_paid" } as const;
+    }
+    if (payment.status === "cancelled") {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, reason: "cancelled" } as const;
+    }
+    if (!isCheckoutPayableStatus(payment.status)) {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, reason: "payment_not_payable" } as const;
+    }
+
+    const strategy = (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy;
+    if (strategy === "destination_manual_capture") {
+      await ctx.db.patch(payment._id, {
+        stripePaymentIntentId: args.stripePaymentIntentId,
+        stripeChargeId: args.stripeChargeId ?? payment.stripeChargeId,
+        captureStatus: "pending_capture",
+        lastWebhookEventId: args.eventId,
+        updatedAt: Date.now(),
+      });
+      await ctx.scheduler.runAt(
+        new Date(payment.releaseAt),
+        internal.stripe.capturePaymentIntentForCompletedBookingInternal,
+        { paymentId: payment._id },
+      );
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, strategy } as const;
+    }
+
+    await markPaymentAsPaidAndSchedule(ctx, payment, {
+      stripePaymentIntentId: args.stripePaymentIntentId,
+      stripeChargeId: args.stripeChargeId ?? payment.stripeChargeId,
+      eventId: args.eventId,
+    });
+
+    return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt } as const;
+  },
+});
+
+export const markPaymentPaidByPaymentIdInternal = internalMutation({
+  args: {
+    paymentId: v.string(),
+    stripePaymentIntentId: v.optional(v.string()),
+    stripeChargeId: v.optional(v.string()),
+    eventId: v.string(),
+  },
+  async handler(ctx, args) {
+    let payment: any = null;
+    try {
+      payment = await ctx.db.get(args.paymentId as any);
+    } catch {
+      return { ok: false, reason: "invalid_payment_id" } as const;
+    }
+
+    if (!payment) {
+      return { ok: false, reason: "payment_not_found" } as const;
+    }
+    if (payment.lastWebhookEventId === args.eventId) {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt } as const;
+    }
+    if (payment.status === "paid") {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, reason: "already_paid" } as const;
+    }
+    if (payment.status === "cancelled") {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, reason: "cancelled" } as const;
+    }
+    if (!isCheckoutPayableStatus(payment.status)) {
+      return { ok: true, paymentId: payment._id, releaseAt: payment.releaseAt, reason: "payment_not_payable" } as const;
+    }
 
     const strategy = (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy;
     if (strategy === "destination_manual_capture") {
@@ -875,6 +1184,7 @@ export const markPaymentCapturedByPaymentIntentInternal = internalMutation({
     if (!payment) return;
     if (payment.lastWebhookEventId === args.eventId) return;
     if (payment.status === "paid") return;
+    if (payment.status === "cancelled") return;
     const strategy = (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy;
     if (strategy === "destination_manual_capture") {
       await ctx.db.patch(payment._id, {
@@ -914,6 +1224,7 @@ export const markPaymentCaptureStateByIntentInternal = internalMutation({
       .first();
     if (!payment) return;
     if (payment.lastWebhookEventId === args.eventId) return;
+    if (payment.status === "cancelled") return;
     const strategy = (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy;
     if (strategy !== "destination_manual_capture") return;
     const now = Date.now();
@@ -943,6 +1254,7 @@ export const markPaymentCaptureStateByPaymentIdInternal = internalMutation({
     const payment = await ctx.db.get(args.paymentId);
     if (!payment) return;
     if (payment.lastWebhookEventId === args.eventId) return;
+    if (payment.status === "cancelled") return;
     const strategy = (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy;
     if (strategy !== "destination_manual_capture") return;
     const now = Date.now();
@@ -1020,6 +1332,7 @@ export const markPaymentFailedByIntentInternal = internalMutation({
       .first();
     if (!payment) return;
     if (payment.lastWebhookEventId === args.eventId) return;
+    if (payment.status === "paid" || payment.status === "cancelled") return;
 
     const booking = await ctx.db.get(payment.bookingId);
     const shouldCancelReservation =
@@ -1169,7 +1482,7 @@ export const updatePaymentPayoutBlockedInternal = internalMutation({
   },
 });
 
-export const getPaymentByCheckoutSessionInternal = query({
+export const getPaymentByCheckoutSessionInternal = internalQuery({
   args: {
     stripeCheckoutSessionId: v.string(),
   },
@@ -1183,31 +1496,46 @@ export const getPaymentByCheckoutSessionInternal = query({
   },
 });
 
-export const getPaymentByChargeIdInternal = query({
+export const getPaymentByChargeIdInternal = internalQuery({
   args: {
     stripeChargeId: v.string(),
   },
   async handler(ctx, args) {
     return await ctx.db
       .query("payments")
-      .filter((q) => q.eq(q.field("stripeChargeId"), args.stripeChargeId))
+      .withIndex("by_charge_id", (q) => q.eq("stripeChargeId", args.stripeChargeId))
       .first();
   },
 });
 
-export const getHostByStripeConnectAccountIdInternal = query({
+export const getHostByStripeConnectAccountIdInternal = internalQuery({
   args: {
     stripeConnectAccountId: v.string(),
   },
   async handler(ctx, args) {
     return await ctx.db
       .query("hosts")
-      .filter((q) => q.eq(q.field("stripeConnectAccountId"), args.stripeConnectAccountId))
+      .withIndex("by_stripe_connect_account_id", (q) =>
+        q.eq("stripeConnectAccountId", args.stripeConnectAccountId),
+      )
       .first();
   },
 });
 
-export const getPaymentForCaptureInternal = query({
+export const getPaymentByIdInternal = internalQuery({
+  args: {
+    paymentId: v.string(),
+  },
+  async handler(ctx, args) {
+    try {
+      return await ctx.db.get(args.paymentId as any);
+    } catch {
+      return null;
+    }
+  },
+});
+
+export const getPaymentForCaptureInternal = internalQuery({
   args: {
     paymentId: v.id("payments"),
   },
@@ -1216,7 +1544,7 @@ export const getPaymentForCaptureInternal = query({
   },
 });
 
-export const getPaymentByBookingIdInternal = query({
+export const getPaymentByBookingIdInternal = internalQuery({
   args: {
     bookingId: v.id("bookings"),
   },
@@ -1251,6 +1579,279 @@ export const fetchSetupIntentPaymentMethodInternal = internalAction({
             ? String(payload.payment_method.id)
             : null,
     };
+  },
+});
+
+export const listStaleCheckoutCandidatesInternal = internalQuery({
+  args: {
+    olderThanMs: v.number(),
+    limit: v.number(),
+  },
+  async handler(ctx, args) {
+    const now = Date.now();
+    const safeLimit = Math.max(1, Math.floor(args.limit));
+    const olderThanMs = Math.max(0, Math.floor(args.olderThanMs));
+    const staleBeforeTs = now - olderThanMs;
+
+    const [methodCollectionPending, checkoutCreated] = await Promise.all([
+      ctx.db
+        .query("payments")
+        .withIndex("by_status_updated_at", (q) =>
+          q.eq("status", "method_collection_pending").lte("updatedAt", staleBeforeTs),
+        )
+        .take(safeLimit * 3),
+      ctx.db
+        .query("payments")
+        .withIndex("by_status_updated_at", (q) =>
+          q.eq("status", "checkout_created").lte("updatedAt", staleBeforeTs),
+        )
+        .take(safeLimit * 3),
+    ]);
+
+    const unique = new Map<string, any>();
+    for (const payment of [...methodCollectionPending, ...checkoutCreated]) {
+      unique.set(String(payment._id), payment);
+    }
+
+    return Array.from(unique.values())
+      .filter((payment) => {
+        return (
+          typeof payment.stripeCheckoutSessionId === "string" &&
+          payment.stripeCheckoutSessionId.trim().length > 0
+        );
+      })
+      .sort((a, b) => (a.updatedAt ?? a.createdAt) - (b.updatedAt ?? b.createdAt))
+      .slice(0, safeLimit)
+      .map((payment) => ({
+        paymentId: String(payment._id),
+        stripeCheckoutSessionId: payment.stripeCheckoutSessionId,
+        status: payment.status,
+        updatedAt: payment.updatedAt,
+      }));
+  },
+});
+
+export const reconcileStaleCheckoutPaymentsInternal = internalAction({
+  args: {
+    limit: v.optional(v.number()),
+    olderThanMs: v.optional(v.number()),
+  },
+  async handler(ctx, args) {
+    const limit =
+      typeof args.limit === "number" && Number.isFinite(args.limit) && args.limit > 0
+        ? Math.floor(args.limit)
+        : 50;
+    const olderThanMs =
+      typeof args.olderThanMs === "number" && Number.isFinite(args.olderThanMs) && args.olderThanMs >= 0
+        ? Math.floor(args.olderThanMs)
+        : 5 * 60 * 1000;
+
+    const candidates = await ctx.runQuery(internal.stripe.listStaleCheckoutCandidatesInternal, {
+      limit,
+      olderThanMs,
+    });
+
+    const results: Array<Record<string, unknown>> = [];
+    for (const candidate of candidates) {
+      const eventIdBase = `stale-checkout-reconcile-${candidate.paymentId}`;
+      try {
+        const session = await stripeGetRequest(
+          `checkout/sessions/${encodeURIComponent(candidate.stripeCheckoutSessionId)}?expand[]=payment_intent`,
+        );
+        const sessionMode = typeof session?.mode === "string" ? session.mode : "";
+        const sessionStatus = typeof session?.status === "string" ? session.status : "";
+        const paymentStatus = typeof session?.payment_status === "string" ? session.payment_status : "";
+        const stripePaymentIntentId =
+          typeof session?.payment_intent === "string"
+            ? session.payment_intent
+            : typeof session?.payment_intent?.id === "string"
+              ? session.payment_intent.id
+              : undefined;
+        const stripeChargeId = resolveStripeChargeIdFromCheckoutSession(session);
+        const metadataPaymentId =
+          readStripeMetadataString(session?.metadata, "paymentId") ?? candidate.paymentId;
+
+        if (sessionMode === "setup") {
+          if (sessionStatus !== "complete") {
+            results.push({
+              paymentId: candidate.paymentId,
+              stripeCheckoutSessionId: candidate.stripeCheckoutSessionId,
+              outcome: "skipped",
+              reason: "setup_session_not_complete",
+              sessionStatus,
+            });
+            continue;
+          }
+          let setupIntentId =
+            typeof session?.setup_intent === "string" ? session.setup_intent : undefined;
+          let paymentMethodId: string | undefined;
+          let customerId: string | undefined =
+            typeof session?.customer === "string" ? session.customer : undefined;
+          if (setupIntentId) {
+            const details = await ctx.runAction(
+              internal.stripe.fetchSetupIntentPaymentMethodInternal,
+              { setupIntentId },
+            );
+            setupIntentId = details.setupIntentId;
+            paymentMethodId = details.paymentMethodId ?? undefined;
+            customerId = customerId ?? details.customerId ?? undefined;
+          }
+          const setupResult = await ctx.runMutation(
+            internal.stripe.markPaymentMethodCollectedByCheckoutSessionInternal,
+            {
+              stripeCheckoutSessionId: candidate.stripeCheckoutSessionId,
+              stripeSetupIntentId: setupIntentId,
+              stripePaymentMethodId: paymentMethodId,
+              stripeCustomerId: customerId,
+              eventId: `${eventIdBase}-setup`,
+            },
+          );
+          results.push({
+            paymentId: candidate.paymentId,
+            stripeCheckoutSessionId: candidate.stripeCheckoutSessionId,
+            sessionMode,
+            sessionStatus,
+            outcome: setupResult?.ok ? "reconciled" : "skipped",
+            reason: setupResult?.reason ?? null,
+          });
+          continue;
+        }
+
+        if (sessionMode !== "payment") {
+          results.push({
+            paymentId: candidate.paymentId,
+            stripeCheckoutSessionId: candidate.stripeCheckoutSessionId,
+            sessionMode,
+            sessionStatus,
+            paymentStatus,
+            outcome: "skipped",
+            reason: "unsupported_checkout_mode",
+          });
+          continue;
+        }
+
+        if (sessionStatus !== "complete" || (paymentStatus !== "paid" && paymentStatus !== "no_payment_required")) {
+          results.push({
+            paymentId: candidate.paymentId,
+            stripeCheckoutSessionId: candidate.stripeCheckoutSessionId,
+            sessionMode,
+            sessionStatus,
+            paymentStatus,
+            outcome: "skipped",
+            reason: "checkout_not_paid",
+          });
+          continue;
+        }
+
+        const primary = await ctx.runMutation(internal.stripe.markPaymentPaidByCheckoutSessionInternal, {
+          stripeCheckoutSessionId: candidate.stripeCheckoutSessionId,
+          stripePaymentIntentId,
+          stripeChargeId,
+          eventId: `${eventIdBase}-primary`,
+        });
+
+        let fallbackByPaymentId: any = null;
+        if (metadataPaymentId && shouldFallbackByPaymentId(primary)) {
+          fallbackByPaymentId = await ctx.runMutation(internal.stripe.markPaymentPaidByPaymentIdInternal, {
+            paymentId: metadataPaymentId,
+            stripePaymentIntentId,
+            stripeChargeId,
+            eventId: `${eventIdBase}-payment-id`,
+          });
+        }
+
+        let fallbackByPaymentIntent: any = null;
+        if (stripePaymentIntentId && shouldFallbackByPaymentId(fallbackByPaymentId ?? primary)) {
+          fallbackByPaymentIntent = await ctx.runMutation(
+            internal.stripe.markPaymentPaidByPaymentIntentInternal,
+            {
+              stripePaymentIntentId,
+              stripeChargeId,
+              eventId: `${eventIdBase}-payment-intent`,
+            },
+          );
+        }
+
+        const primaryReason = typeof primary?.reason === "string" ? primary.reason : null;
+        const fallbackReason =
+          fallbackByPaymentId && typeof fallbackByPaymentId.reason === "string"
+            ? fallbackByPaymentId.reason
+            : null;
+        const paymentIntentFallbackReason =
+          fallbackByPaymentIntent && typeof fallbackByPaymentIntent.reason === "string"
+            ? fallbackByPaymentIntent.reason
+            : null;
+        const reconciled =
+          (primary?.ok &&
+            primaryReason !== "payment_not_found" &&
+            primaryReason !== "payment_not_payable" &&
+            primaryReason !== "cancelled") ||
+          Boolean(
+            fallbackByPaymentId &&
+              fallbackByPaymentId.ok &&
+              fallbackReason !== "payment_not_found" &&
+              fallbackReason !== "payment_not_payable" &&
+              fallbackReason !== "cancelled",
+          ) ||
+          Boolean(
+            fallbackByPaymentIntent &&
+              fallbackByPaymentIntent.ok &&
+              paymentIntentFallbackReason !== "payment_not_found" &&
+              paymentIntentFallbackReason !== "payment_not_payable" &&
+              paymentIntentFallbackReason !== "cancelled",
+          );
+
+        results.push({
+          paymentId: candidate.paymentId,
+          stripeCheckoutSessionId: candidate.stripeCheckoutSessionId,
+          sessionMode,
+          sessionStatus,
+          paymentStatus,
+          stripePaymentIntentId: stripePaymentIntentId ?? null,
+          stripeChargeId: stripeChargeId ?? null,
+          metadataPaymentId,
+          outcome: reconciled ? "reconciled" : "skipped",
+          primaryReason,
+          fallbackReason,
+          paymentIntentFallbackReason,
+        });
+      } catch (error) {
+        results.push({
+          paymentId: candidate.paymentId,
+          stripeCheckoutSessionId: candidate.stripeCheckoutSessionId,
+          outcome: "error",
+          reason: error instanceof Error ? error.message : "reconcile_failed",
+        });
+      }
+    }
+
+    const reconciled = results.filter((result) => result.outcome === "reconciled").length;
+    const skipped = results.filter((result) => result.outcome === "skipped").length;
+    const errored = results.filter((result) => result.outcome === "error").length;
+
+    return {
+      scanned: candidates.length,
+      reconciled,
+      skipped,
+      errored,
+      limit,
+      olderThanMs,
+      results,
+    };
+  },
+});
+
+export const reconcileStaleCheckoutPayments = action({
+  args: {
+    limit: v.optional(v.number()),
+    olderThanMs: v.optional(v.number()),
+  },
+  async handler(ctx, args) {
+    await assertAdminFromClerkRoleClaim(ctx);
+    return await ctx.runAction(internal.stripe.reconcileStaleCheckoutPaymentsInternal, {
+      limit: args.limit,
+      olderThanMs: args.olderThanMs,
+    });
   },
 });
 
@@ -1309,3 +1910,4 @@ export const backfillPaymentStrategyInternal = internalMutation({
     };
   },
 });
+

@@ -1,25 +1,55 @@
 import { useEffect, useMemo, useState } from "react";
 import { useColorScheme } from "nativewind";
-import { Pressable, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useAction } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "@clerk/clerk-expo";
 
 import { api } from "@/convex/_generated/api";
 import { DateRangePicker } from "@/components/filters/DateRangePicker";
 import { Text } from "@/components/ui/text";
 import { BrowseHeader } from "@/features/cars/components/dashboard/BrowseHeader";
 import { LocationSearchBar } from "@/features/cars/components/dashboard/LocationSearchBar";
+import { OfferSection } from "@/features/cars/components/dashboard/OfferSection";
 import {
+  toEndOfDayIso,
   toDateInputValue,
+  toStartOfDayIso,
   type LocationSuggestion,
 } from "@/features/cars/components/dashboard/searchUtils";
+import type {
+  NearbyBigCityOffersResult,
+  PromotionalOffer,
+  RecentLocation,
+} from "@/features/cars/components/dashboard/types";
+import {
+  clearGuestRecentSearches,
+  loadGuestRecentSearches,
+  saveGuestRecentSearch,
+} from "@/lib/recentSearches";
 import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
+
+type RecentOffersResult = {
+  recentLocations: RecentLocation[];
+  offers: PromotionalOffer[];
+  error: string | null;
+};
+
+type PromotionsQueryArgs =
+  | {
+      startDate: string;
+      endDate: string;
+      fallbackRecentLocations: RecentLocation[];
+      limit: number;
+    }
+  | "skip";
 
 export default function ExploreEntryScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { isSignedIn } = useAuth();
   const mode = resolveThemeMode(useColorScheme());
 
   const today = useMemo(() => new Date(), []);
@@ -38,11 +68,46 @@ export default function ExploreEntryScreen() {
   const [endDate, setEndDate] = useState(toDateInputValue(defaultEnd));
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [guestRecentLocations, setGuestRecentLocations] = useState<RecentLocation[]>([]);
+  const [isGuestHistoryLoaded, setIsGuestHistoryLoaded] = useState(false);
+  const [isMergingGuestHistory, setIsMergingGuestHistory] = useState(false);
   const searchAddresses = useAction(api.cars.searchAddresses);
   const resolveAddressDetails = useAction(api.cars.resolveAddressDetails);
+  const upsertRecentLocationSearch = useMutation(api.recentSearches.upsertRecentLocationSearch);
   const [placesSessionToken] = useState(
     () => `places-${Math.random().toString(16).slice(2)}-${Date.now().toString(16)}`,
   );
+
+  const recentServerLocations = useQuery(
+    api.recentSearches.listMyRecentLocationSearches,
+    isSignedIn ? { limit: 5 } : "skip",
+  ) as RecentLocation[] | undefined;
+
+  const startIso = useMemo(() => toStartOfDayIso(startDate), [startDate]);
+  const endIso = useMemo(() => toEndOfDayIso(endDate), [endDate]);
+  const isDateRangeValid = useMemo(
+    () => new Date(startIso).getTime() <= new Date(endIso).getTime(),
+    [endIso, startIso],
+  );
+
+  const promoArgs = useMemo<PromotionsQueryArgs>(() => {
+    if (!isGuestHistoryLoaded || !isDateRangeValid) return "skip";
+    return {
+      startDate: startIso,
+      endDate: endIso,
+      fallbackRecentLocations: guestRecentLocations,
+      limit: 6,
+    };
+  }, [endIso, guestRecentLocations, isDateRangeValid, isGuestHistoryLoaded, startIso]);
+
+  const recentOffersData = useQuery(
+    api.cars.listPromotionalOffersForRecentLocations,
+    promoArgs === "skip" ? "skip" : promoArgs,
+  ) as RecentOffersResult | undefined;
+  const nearbyBigCityOffersData = useQuery(
+    api.cars.listPromotionalOffersForNearbyBigCity,
+    promoArgs === "skip" ? "skip" : promoArgs,
+  ) as NearbyBigCityOffersResult | undefined;
 
   useEffect(() => {
     const trimmed = locationQuery.trim();
@@ -91,6 +156,65 @@ export default function ExploreEntryScreen() {
       clearTimeout(timeout);
     };
   }, [locationQuery, placesSessionToken, searchAddresses, selectedLocationSuggestion]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const rows = await loadGuestRecentSearches();
+      if (cancelled) return;
+      setGuestRecentLocations(rows);
+      setIsGuestHistoryLoaded(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    if (!isGuestHistoryLoaded || guestRecentLocations.length === 0) return;
+    if (isMergingGuestHistory) return;
+
+    let cancelled = false;
+    setIsMergingGuestHistory(true);
+
+    void (async () => {
+      try {
+        for (const row of guestRecentLocations) {
+          await upsertRecentLocationSearch({
+            placeId: row.placeId,
+            description: row.description,
+            city: row.city,
+            country: row.country,
+            lat: row.lat,
+            lng: row.lng,
+          });
+          if (cancelled) return;
+        }
+        await clearGuestRecentSearches();
+        if (!cancelled) {
+          setGuestRecentLocations([]);
+        }
+      } catch {
+        // Keep local history when merge fails and retry on next eligible render.
+      } finally {
+        if (!cancelled) {
+          setIsMergingGuestHistory(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    guestRecentLocations,
+    isGuestHistoryLoaded,
+    isMergingGuestHistory,
+    isSignedIn,
+    upsertRecentLocationSearch,
+  ]);
 
   const handleSearchSubmit = async () => {
     const location = locationQuery.trim();
@@ -145,6 +269,32 @@ export default function ExploreEntryScreen() {
       setLocationQuery(suggestion.description);
       setLocationSuggestions([]);
       setShowLocationSuggestions(false);
+      setIsSearchingLocationSuggestions(false);
+
+      try {
+        if (isSignedIn) {
+          await upsertRecentLocationSearch({
+            placeId: suggestion.placeId,
+            description: suggestion.description,
+            city: details.city,
+            country: details.country,
+            lat: details.lat,
+            lng: details.lng,
+          });
+        } else {
+          const nextGuestRows = await saveGuestRecentSearch({
+            placeId: suggestion.placeId,
+            description: suggestion.description,
+            city: details.city,
+            country: details.country,
+            lat: details.lat,
+            lng: details.lng,
+          });
+          setGuestRecentLocations(nextGuestRows);
+        }
+      } catch {
+        // Keep search flow resilient if persistence fails.
+      }
 
       router.push({
         pathname: "/search",
@@ -163,16 +313,39 @@ export default function ExploreEntryScreen() {
     }
   };
 
+  const recentOffers = recentOffersData?.offers ?? [];
+  const nearbyOffers = nearbyBigCityOffersData?.offers ?? [];
+  const hasRecentHistory =
+    (recentOffersData?.recentLocations?.length ?? 0) > 0 ||
+    (isSignedIn ? (recentServerLocations?.length ?? 0) : guestRecentLocations.length) > 0;
+  const recentSectionLoading = promoArgs !== "skip" && recentOffersData === undefined;
+  const nearbySectionLoading = promoArgs !== "skip" && nearbyBigCityOffersData === undefined;
+
+  const nearbySubtitle = nearbyBigCityOffersData?.city
+    ? t("explore.promotions.nearbyCitySubtitle", {
+        city: nearbyBigCityOffersData.city.city,
+        country: nearbyBigCityOffersData.city.country,
+        count: nearbyBigCityOffersData.city.listingCount,
+      })
+    : t("explore.promotions.nearbyCitySubtitleFallback");
+
+  const recentEmptyMessage = hasRecentHistory
+    ? t("explore.promotions.noRecentOffers")
+    : t("explore.promotions.emptyRecent");
+  const nearbyEmptyMessage = nearbyBigCityOffersData?.anchorLocation
+    ? t("explore.promotions.emptyNearbyCity")
+    : t("explore.promotions.nearbyNoAnchor");
+
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <View className="flex-1 px-4 pb-4 pt-2">
+      <ScrollView
+        className="flex-1 px-4 pt-2"
+        contentContainerStyle={{ paddingBottom: 20 }}
+        showsVerticalScrollIndicator={false}
+      >
         <BrowseHeader iconColor={getTokenColor(mode, "icon")} />
 
-        <View className="rounded-2xl border border-border bg-card p-4">
-          <Text className="text-sm text-muted-foreground">{t("common.actions.browseCars")}</Text>
-          <Text className="mt-1 text-2xl font-bold text-foreground">{t("explore.findYourRide")}</Text>
-
-          <View className="mt-4 gap-3">
+        <View className="gap-3">
             <LocationSearchBar
               locationQuery={locationQuery}
               onChangeLocation={(value) => {
@@ -201,6 +374,7 @@ export default function ExploreEntryScreen() {
             <DateRangePicker
               startDate={startDate}
               endDate={endDate}
+              showLabel={false}
               onApply={(nextStartDate, nextEndDate) => {
                 setStartDate(nextStartDate);
                 setEndDate(nextEndDate);
@@ -222,9 +396,30 @@ export default function ExploreEntryScreen() {
                 {isSearchingLocation ? t("common.loading") : t("explore.searchOffers")}
               </Text>
             </Pressable>
-          </View>
+
+            <OfferSection
+              title={t("explore.promotions.recentTitle")}
+              subtitle={t("explore.promotions.recentSubtitle")}
+              offers={recentOffers}
+              startDate={startDate}
+              endDate={endDate}
+              isLoading={recentSectionLoading}
+              error={recentOffersData?.error ?? null}
+              emptyMessage={recentEmptyMessage}
+            />
+
+            <OfferSection
+              title={t("explore.promotions.nearbyCityTitle")}
+              subtitle={nearbySubtitle}
+              offers={nearbyOffers}
+              startDate={startDate}
+              endDate={endDate}
+              isLoading={nearbySectionLoading}
+              error={nearbyBigCityOffersData?.error ?? null}
+              emptyMessage={nearbyEmptyMessage}
+            />
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
