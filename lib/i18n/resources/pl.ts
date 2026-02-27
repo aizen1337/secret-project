@@ -35,9 +35,12 @@ export const pl = {
     },
     datePicker: {
       dates: 'Daty',
+      hours: 'Godziny',
       selectDates: 'Wybierz daty',
       pickCheckIn: 'Wybierz date odbioru',
       pickCheckOut: 'Wybierz date zwrotu',
+      pickStartHour: 'Wybierz godzine odbioru',
+      pickEndHour: 'Wybierz godzine zwrotu',
       apply: 'Zastosuj',
     },
     errors: {
@@ -358,6 +361,10 @@ export const pl = {
     depositStatus: 'Kaucja: {{status}}',
     paymentDue: 'Platnosc do: {{date}}',
     transferScheduled: 'Przelew zaplanowany na: {{date}}',
+    retryPayout: 'Ponow wyplate',
+    retryingPayout: 'Ponawianie wyplaty...',
+    payoutRetrySuccess: 'Przelew wyplaty zostal wykonany.',
+    payoutRetryFailed: 'Nie udalo sie ponowic wyplaty: {{reason}}',
     mapTitle: 'Mapa odbioru',
     mapSubtitle: '{{city}}, {{country}}',
     mapUnavailable: 'Mapa lokalizacji jest niedostepna dla tej rezerwacji.',

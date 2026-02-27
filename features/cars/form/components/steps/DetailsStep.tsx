@@ -1,6 +1,6 @@
 import { Pressable, Text, TextInput, View } from "react-native";
 
-import { DateRangePicker } from "@/components/filters/DateRangePicker";
+import { DateRangePicker } from "@/features/shared-date-range/ui/DateRangePicker";
 import { FUEL_POLICIES } from "@/features/cars/form/constants";
 import type { AddressSuggestion, FieldErrors, FuelPolicy } from "@/features/cars/form/types";
 

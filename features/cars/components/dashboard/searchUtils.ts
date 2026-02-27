@@ -1,4 +1,6 @@
 export const DEFAULT_SEARCH_RADIUS_KM = 50;
+export const DEFAULT_START_HOUR = "00";
+export const DEFAULT_END_HOUR = "23";
 
 type MapRegion = {
   latitude: number;
@@ -31,8 +33,35 @@ export function toEndOfDayIso(value: string) {
   return new Date(Date.UTC(year, month - 1, day, 23, 59, 59)).toISOString();
 }
 
+function normalizeHour(value: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(23, Math.trunc(parsed)));
+}
+
+export function toStartOfHourIso(dateValue: string, hourValue: string) {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const hour = normalizeHour(hourValue);
+  return new Date(Date.UTC(year, month - 1, day, hour, 0, 0)).toISOString();
+}
+
+export function toEndOfHourIso(dateValue: string, hourValue: string) {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const hour = normalizeHour(hourValue);
+  return new Date(Date.UTC(year, month - 1, day, hour, 59, 59)).toISOString();
+}
+
 export function isDateInput(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+export function isHourInput(value: unknown): value is string {
+  return typeof value === "string" && /^(?:[01]\d|2[0-3])$/.test(value);
+}
+
+export function formatHour(value: number) {
+  const normalized = Math.max(0, Math.min(23, Math.trunc(value)));
+  return String(normalized).padStart(2, "0");
 }
 
 export function normalizeParam(value: string | string[] | undefined) {

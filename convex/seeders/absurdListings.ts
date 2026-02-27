@@ -4,6 +4,8 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { assertAdminFromClerkRoleClaim } from "../guards/adminGuard";
 
+const unsafeInternal = internal as any;
+
 const DEFAULT_TOTAL_COUNT = 4000;
 const DEFAULT_BATCH_SIZE = 250;
 const MAX_TOTAL_COUNT = 50000;
@@ -181,13 +183,13 @@ export const seedAbsurdListings = action({
     totalCount: v.optional(v.number()),
     batchSize: v.optional(v.number()),
   },
-  async handler(ctx, args) {
+  async handler(ctx: any, args: any): Promise<any> {
     await assertAdminFromClerkRoleClaim(ctx);
     const totalCount = clampInt(args.totalCount ?? DEFAULT_TOTAL_COUNT, 1, MAX_TOTAL_COUNT);
     const batchSize = clampInt(args.batchSize ?? DEFAULT_BATCH_SIZE, MIN_BATCH_SIZE, MAX_BATCH_SIZE);
 
     const { hostId } = await ctx.runMutation(
-      internal["seeders/absurdListings"].ensureAbsurdSeederHostInternal,
+      unsafeInternal["seeders/absurdListings"].ensureAbsurdSeederHostInternal,
       {},
     );
 
@@ -197,7 +199,7 @@ export const seedAbsurdListings = action({
 
     while (inserted < totalCount) {
       const chunk = Math.min(batchSize, totalCount - inserted);
-      await ctx.runMutation(internal["seeders/absurdListings"].seedAbsurdListingsBatchInternal, {
+      await ctx.runMutation(unsafeInternal["seeders/absurdListings"].seedAbsurdListingsBatchInternal, {
         hostId,
         startIndex: baseIndex + inserted,
         count: chunk,

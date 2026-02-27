@@ -35,9 +35,12 @@ export const en = {
     },
     datePicker: {
       dates: 'Dates',
+      hours: 'Hours',
       selectDates: 'Select dates',
       pickCheckIn: 'Pick check-in date',
       pickCheckOut: 'Pick check-out date',
+      pickStartHour: 'Pick start hour',
+      pickEndHour: 'Pick end hour',
       apply: 'Apply',
     },
     errors: {
@@ -358,6 +361,10 @@ export const en = {
     depositStatus: 'Deposit: {{status}}',
     paymentDue: 'Payment due by: {{date}}',
     transferScheduled: 'Transfer scheduled for: {{date}}',
+    retryPayout: 'Retry payout',
+    retryingPayout: 'Retrying payout...',
+    payoutRetrySuccess: 'Payout transfer completed.',
+    payoutRetryFailed: 'Payout retry did not complete: {{reason}}',
     mapTitle: 'Pickup map',
     mapSubtitle: '{{city}}, {{country}}',
     mapUnavailable: 'Location map is unavailable for this booking.',

@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { useTranslation } from "react-i18next";
-import { BottomNav } from "@/components/navigation/BottomNav";
+import { BottomNav } from "@/features/app-shell/ui/BottomNav";
 
 export default function TabsLayout() {
   const { t } = useTranslation();

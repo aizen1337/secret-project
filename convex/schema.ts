@@ -89,6 +89,19 @@ export default defineSchema({
     .index("by_user_lastSearched", ["userId", "lastSearchedAt"])
     .index("by_user_place", ["userId", "placeId"]),
 
+  external_api_usage: defineTable({
+    userId: v.id("users"),
+    action: v.union(
+      v.literal("vin_lookup"),
+      v.literal("address_search"),
+      v.literal("address_details"),
+    ),
+    bucketStart: v.number(),
+    count: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user_action_bucket", ["userId", "action", "bucketStart"]),
+
   bookings: defineTable({
     carId: v.id("cars"),
     renterId: v.id("users"),

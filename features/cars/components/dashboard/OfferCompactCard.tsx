@@ -12,14 +12,22 @@ type OfferCompactCardProps = {
   offer: PromotionalOffer;
   startDate: string;
   endDate: string;
+  startHour: string;
+  endHour: string;
 };
 
-export function OfferCompactCard({ offer, startDate, endDate }: OfferCompactCardProps) {
+export function OfferCompactCard({
+  offer,
+  startDate,
+  endDate,
+  startHour,
+  endHour,
+}: OfferCompactCardProps) {
   const { t } = useTranslation();
   const mode = resolveThemeMode(useColorScheme());
   const href = {
     pathname: `/car/${offer.id}`,
-    params: { startDate, endDate },
+    params: { startDate, endDate, startHour, endHour },
   } as const;
   const primaryImage = offer.images[0] ?? "";
   const badge =

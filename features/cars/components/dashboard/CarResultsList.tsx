@@ -14,6 +14,8 @@ type CarResultsListProps = {
   onPressCar: (carId: string) => void;
   startDate?: string;
   endDate?: string;
+  startHour?: string;
+  endHour?: string;
   paddingBottom: number;
   onEndReached?: () => void;
   isLoadingMore?: boolean;
@@ -26,6 +28,8 @@ export function CarResultsList({
   onPressCar,
   startDate,
   endDate,
+  startHour,
+  endHour,
   paddingBottom,
   onEndReached,
   isLoadingMore = false,
@@ -41,6 +45,8 @@ export function CarResultsList({
           car={item}
           startDate={startDate}
           endDate={endDate}
+          startHour={startHour}
+          endHour={endHour}
           onPress={() => onPressCar(item.id)}
           highlighted={item.id === selectedCarId}
         />

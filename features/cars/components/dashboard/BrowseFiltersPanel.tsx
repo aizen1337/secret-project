@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Pressable, View } from "react-native";
 import { useTranslation } from "react-i18next";
 
-import { DateRangePicker } from "@/components/filters/DateRangePicker";
+import { DateRangePicker } from "@/features/shared-date-range/ui/DateRangePicker";
 import { Text } from "@/components/ui/text";
 import type { LocationSuggestion } from "@/features/cars/components/dashboard/searchUtils";
 import type { BrowseAdvancedFilters } from "@/features/cars/components/dashboard/types";
@@ -22,7 +22,10 @@ type BrowseFiltersPanelProps = {
   isSearchingLocation: boolean;
   startDate: string;
   endDate: string;
+  startHour: string;
+  endHour: string;
   onApplyDates: (startDate: string, endDate: string) => void;
+  onApplyHours: (startHour: string, endHour: string) => void;
   draftFilters: BrowseAdvancedFilters;
   onChangeDraftFilters: (next: BrowseAdvancedFilters) => void;
   onApplyDraftFilters: () => void;
@@ -50,7 +53,10 @@ export function BrowseFiltersPanel({
   isSearchingLocation,
   startDate,
   endDate,
+  startHour,
+  endHour,
   onApplyDates,
+  onApplyHours,
   draftFilters,
   onChangeDraftFilters,
   onApplyDraftFilters,
@@ -97,7 +103,10 @@ export function BrowseFiltersPanel({
               <DateRangePicker
                 startDate={startDate}
                 endDate={endDate}
+                startHour={startHour}
+                endHour={endHour}
                 onApply={onApplyDates}
+                onApplyHours={onApplyHours}
               />
             </View>
             <Pressable onPress={onOpenFiltersDialog} className={filterButtonClassName}>
@@ -131,7 +140,10 @@ export function BrowseFiltersPanel({
             <DateRangePicker
               startDate={startDate}
               endDate={endDate}
+              startHour={startHour}
+              endHour={endHour}
               onApply={onApplyDates}
+              onApplyHours={onApplyHours}
             />
           </View>
           <Pressable onPress={onOpenFiltersDialog} className={filterButtonClassName}>

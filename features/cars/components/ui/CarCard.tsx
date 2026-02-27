@@ -20,15 +20,33 @@ type CarCardProps = {
   };
   startDate?: string;
   endDate?: string;
+  startHour?: string;
+  endHour?: string;
   onPress?: () => void;
   highlighted?: boolean;
 };
 
-export function CarCard({ car, startDate, endDate, onPress, highlighted = false }: CarCardProps) {
+export function CarCard({
+  car,
+  startDate,
+  endDate,
+  startHour,
+  endHour,
+  onPress,
+  highlighted = false,
+}: CarCardProps) {
   const { t } = useTranslation();
   const mode = resolveThemeMode(useColorScheme());
   const href = startDate && endDate
-    ? ({ pathname: `/car/${car.id}`, params: { startDate, endDate } } as const)
+    ? ({
+        pathname: `/car/${car.id}`,
+        params: {
+          startDate,
+          endDate,
+          ...(startHour ? { startHour } : {}),
+          ...(endHour ? { endHour } : {}),
+        },
+      } as const)
     : (`/car/${car.id}` as const);
 
   return (

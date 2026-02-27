@@ -8,7 +8,14 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "reset-project": "node ./scripts/reset-project.js",
-    "lint": "expo lint",
+    "lint": "npm run lint:internal-handlers && npm run lint:arch && expo lint",
+    "lint:internal-handlers": "node ./scripts/checkInternalHandlers.mjs",
+    "lint:route-shells": "node ./scripts/checkRouteShells.mjs",
+    "lint:convex-thin": "node ./scripts/checkConvexThinWrappers.mjs",
+    "lint:no-ts-nocheck": "node ./scripts/checkNoTsNoCheck.mjs",
+    "lint:arch": "npm run lint:route-shells && npm run lint:convex-thin && npm run lint:no-ts-nocheck",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run tests/unit",
     "stripe:webhook:setup": "node ./scripts/setupStripeWebhook.mjs",
     "stripe:reconcile-stale-checkout": "node ./scripts/reconcileStaleCheckoutPayments.mjs"
   },
@@ -60,10 +67,12 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.21",
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^3.2.4"
   },
   "private": true
 }

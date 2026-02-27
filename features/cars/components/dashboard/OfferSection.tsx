@@ -12,6 +12,8 @@ type OfferSectionProps = {
   offers: PromotionalOffer[];
   startDate: string;
   endDate: string;
+  startHour: string;
+  endHour: string;
   isLoading: boolean;
   error: string | null;
   emptyMessage: string;
@@ -23,6 +25,8 @@ export function OfferSection({
   offers,
   startDate,
   endDate,
+  startHour,
+  endHour,
   isLoading,
   error,
   emptyMessage,
@@ -64,6 +68,8 @@ export function OfferSection({
               offer={offer}
               startDate={startDate}
               endDate={endDate}
+              startHour={startHour}
+              endHour={endHour}
             />
           ))}
         </ScrollView>
