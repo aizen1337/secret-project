@@ -120,6 +120,11 @@ function createInitialState(mode: CarFormMode): CarFormState {
     depositAmount: "",
     fuelPolicy: "",
     fuelPolicyNote: "",
+    collectionMethods: ["in_person"],
+    collectionInPersonInstructions: "",
+    collectionLockboxCode: "",
+    collectionLockboxInstructions: "",
+    collectionDeliveryInstructions: "",
     existingImageUrls: [],
     initialImageUrls: [],
     newImages: [],
@@ -216,6 +221,14 @@ export function useCarFormWizard({
         depositAmount: initialData.depositAmount !== undefined ? String(initialData.depositAmount) : "",
         fuelPolicy: initialData.fuelPolicy ?? "",
         fuelPolicyNote: initialData.fuelPolicyNote ?? "",
+        collectionMethods:
+          Array.isArray(initialData.collectionMethods) && initialData.collectionMethods.length > 0
+            ? initialData.collectionMethods
+            : ["in_person"],
+        collectionInPersonInstructions: initialData.collectionInPersonInstructions ?? "",
+        collectionLockboxCode: initialData.collectionLockboxCode ?? "",
+        collectionLockboxInstructions: initialData.collectionLockboxInstructions ?? "",
+        collectionDeliveryInstructions: initialData.collectionDeliveryInstructions ?? "",
         existingImageUrls: initialData.images ?? [],
         initialImageUrls: initialData.images ?? [],
       },

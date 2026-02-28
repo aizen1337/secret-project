@@ -19,7 +19,10 @@ export type FieldErrorKey =
   | "images"
   | "availability"
   | "address"
-  | "features";
+  | "features"
+  | "collectionMethods"
+  | "collectionLockboxCode"
+  | "collectionDeliveryInstructions";
 
 export type FieldErrors = Partial<Record<FieldErrorKey, string>>;
 
@@ -31,6 +34,7 @@ export type AddressSuggestion = {
 export type WizardStep = "identification" | "details" | "features" | "images";
 
 export type FuelPolicy = "full_to_full" | "same_to_same" | "fuel_included";
+export type CollectionMethod = "in_person" | "lockbox" | "host_delivery";
 
 export type DisplayImage = {
   uri: string;
@@ -64,6 +68,11 @@ export type CarFormHydrationData = {
   depositAmount?: number;
   fuelPolicy?: FuelPolicy;
   fuelPolicyNote?: string;
+  collectionMethods?: CollectionMethod[];
+  collectionInPersonInstructions?: string;
+  collectionLockboxCode?: string;
+  collectionLockboxInstructions?: string;
+  collectionDeliveryInstructions?: string;
   images?: string[];
 };
 
@@ -97,6 +106,11 @@ export type CarFormState = {
   depositAmount: string;
   fuelPolicy: FuelPolicy | "";
   fuelPolicyNote: string;
+  collectionMethods: CollectionMethod[];
+  collectionInPersonInstructions: string;
+  collectionLockboxCode: string;
+  collectionLockboxInstructions: string;
+  collectionDeliveryInstructions: string;
   existingImageUrls: string[];
   initialImageUrls: string[];
   newImages: ImagePicker.ImagePickerAsset[];

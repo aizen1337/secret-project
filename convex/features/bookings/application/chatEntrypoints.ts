@@ -8,7 +8,7 @@ const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 50;
 const MAX_IMAGES_PER_MESSAGE = 3;
 const CHAT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const CHAT_SENDABLE_STATUSES = new Set(["paid", "confirmed", "completed"]);
+const CHAT_SENDABLE_STATUSES = new Set(["paid", "confirmed", "in_progress", "completed"]);
 
 export type BookingChatSendDisabledReason = "not_confirmed" | "expired" | "cancelled" | null;
 

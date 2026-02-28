@@ -13,6 +13,7 @@ export function statusBadgeClasses(status: string | undefined) {
   if (
     normalized === "paid" ||
     normalized === "confirmed" ||
+    normalized === "in_progress" ||
     normalized === "completed" ||
     normalized === "transferred" ||
     normalized === "held" ||

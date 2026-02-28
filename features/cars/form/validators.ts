@@ -59,6 +59,15 @@ export function validateDetails(state: CarFormState, t: ValidationT): FieldError
   if (state.fuelPolicyNote.trim().length > 0 && !state.fuelPolicy) {
     errors.fuelPolicy = t("carForm.validation.fuelPolicyRequiredForNote");
   }
+  if (state.collectionMethods.length < 1) {
+    errors.collectionMethods = t("carForm.validation.collectionMethodsRequired");
+  }
+  if (state.collectionMethods.includes("lockbox") && !state.collectionLockboxCode.trim()) {
+    errors.collectionLockboxCode = t("carForm.validation.collectionLockboxCodeRequired");
+  }
+  if (state.collectionMethods.includes("host_delivery") && !state.collectionDeliveryInstructions.trim()) {
+    errors.collectionDeliveryInstructions = t("carForm.validation.collectionDeliveryInstructionsRequired");
+  }
   return errors;
 }
 

@@ -3,6 +3,7 @@ import { api } from "@/convex/_generated/api";
 export const bookingsApi = {
   listMyTripsWithPayments: api.bookings.listMyTripsWithPayments,
   getBookingDetails: api.bookings.getBookingDetails,
+  confirmTripStartCollection: api.bookings.confirmTripStartCollection,
   cancelReservation: api.bookings.cancelReservation,
   retryHostPayoutTransfer: api.bookings.retryHostPayoutTransfer,
   createReservationPayNowSession: api.stripe.createReservationPayNowSession,

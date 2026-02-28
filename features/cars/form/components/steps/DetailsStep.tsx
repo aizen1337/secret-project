@@ -2,7 +2,18 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { DateRangePicker } from "@/features/shared-date-range/ui/DateRangePicker";
 import { FUEL_POLICIES } from "@/features/cars/form/constants";
-import type { AddressSuggestion, FieldErrors, FuelPolicy } from "@/features/cars/form/types";
+import type {
+  AddressSuggestion,
+  CollectionMethod,
+  FieldErrors,
+  FuelPolicy,
+} from "@/features/cars/form/types";
+
+const COLLECTION_METHOD_OPTIONS: Array<{ value: CollectionMethod; labelKey: string }> = [
+  { value: "in_person", labelKey: "carForm.details.collectionMethods.in_person" },
+  { value: "lockbox", labelKey: "carForm.details.collectionMethods.lockbox" },
+  { value: "host_delivery", labelKey: "carForm.details.collectionMethods.host_delivery" },
+];
 
 type DetailsStepProps = {
   title: string;
@@ -24,6 +35,11 @@ type DetailsStepProps = {
   depositAmount: string;
   fuelPolicy: FuelPolicy | "";
   fuelPolicyNote: string;
+  collectionMethods: CollectionMethod[];
+  collectionInPersonInstructions: string;
+  collectionLockboxCode: string;
+  collectionLockboxInstructions: string;
+  collectionDeliveryInstructions: string;
   isSearchingAddress: boolean;
   fieldErrors: FieldErrors;
   t: (key: string) => string;
@@ -44,6 +60,11 @@ type DetailsStepProps = {
   onDepositAmountChange: (value: string) => void;
   onFuelPolicyChange: (value: FuelPolicy) => void;
   onFuelPolicyNoteChange: (value: string) => void;
+  onToggleCollectionMethod: (value: CollectionMethod) => void;
+  onCollectionInPersonInstructionsChange: (value: string) => void;
+  onCollectionLockboxCodeChange: (value: string) => void;
+  onCollectionLockboxInstructionsChange: (value: string) => void;
+  onCollectionDeliveryInstructionsChange: (value: string) => void;
 };
 
 export function DetailsStep({
@@ -66,6 +87,11 @@ export function DetailsStep({
   depositAmount,
   fuelPolicy,
   fuelPolicyNote,
+  collectionMethods,
+  collectionInPersonInstructions,
+  collectionLockboxCode,
+  collectionLockboxInstructions,
+  collectionDeliveryInstructions,
   isSearchingAddress,
   fieldErrors,
   t,
@@ -86,6 +112,11 @@ export function DetailsStep({
   onDepositAmountChange,
   onFuelPolicyChange,
   onFuelPolicyNoteChange,
+  onToggleCollectionMethod,
+  onCollectionInPersonInstructionsChange,
+  onCollectionLockboxCodeChange,
+  onCollectionLockboxInstructionsChange,
+  onCollectionDeliveryInstructionsChange,
 }: DetailsStepProps) {
   return (
     <>
@@ -193,6 +224,78 @@ export function DetailsStep({
           placeholder={t("carForm.details.fuelNotePlaceholder")}
           className="rounded-lg border border-border px-3 py-3 text-foreground mt-3"
         />
+
+        <Text className="text-xs uppercase text-muted-foreground mb-2 mt-4">
+          {t("carForm.details.collectionTitle")}
+        </Text>
+        <View className="flex-row flex-wrap gap-2">
+          {COLLECTION_METHOD_OPTIONS.map((option) => {
+            const selected = collectionMethods.includes(option.value);
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() => onToggleCollectionMethod(option.value)}
+                className={`px-3 py-2 rounded-full border ${selected ? "bg-primary border-primary" : "bg-secondary border-border"}`}
+              >
+                <Text className={`text-xs font-medium ${selected ? "text-primary-foreground" : "text-foreground"}`}>
+                  {t(option.labelKey)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {fieldErrors.collectionMethods ? (
+          <Text className="text-xs text-destructive mt-2">{fieldErrors.collectionMethods}</Text>
+        ) : null}
+
+        {collectionMethods.includes("in_person") ? (
+          <TextInput
+            value={collectionInPersonInstructions}
+            onChangeText={onCollectionInPersonInstructionsChange}
+            placeholder={t("carForm.details.collectionInPersonPlaceholder")}
+            className="rounded-lg border border-border px-3 py-3 text-foreground mt-3"
+            multiline
+          />
+        ) : null}
+
+        {collectionMethods.includes("lockbox") ? (
+          <>
+            <TextInput
+              value={collectionLockboxCode}
+              onChangeText={onCollectionLockboxCodeChange}
+              placeholder={t("carForm.details.collectionLockboxCodePlaceholder")}
+              className="rounded-lg border border-border px-3 py-3 text-foreground mt-3"
+              secureTextEntry
+            />
+            {fieldErrors.collectionLockboxCode ? (
+              <Text className="text-xs text-destructive mt-1">{fieldErrors.collectionLockboxCode}</Text>
+            ) : null}
+            <TextInput
+              value={collectionLockboxInstructions}
+              onChangeText={onCollectionLockboxInstructionsChange}
+              placeholder={t("carForm.details.collectionLockboxInstructionsPlaceholder")}
+              className="rounded-lg border border-border px-3 py-3 text-foreground mt-3"
+              multiline
+            />
+          </>
+        ) : null}
+
+        {collectionMethods.includes("host_delivery") ? (
+          <>
+            <TextInput
+              value={collectionDeliveryInstructions}
+              onChangeText={onCollectionDeliveryInstructionsChange}
+              placeholder={t("carForm.details.collectionDeliveryInstructionsPlaceholder")}
+              className="rounded-lg border border-border px-3 py-3 text-foreground mt-3"
+              multiline
+            />
+            {fieldErrors.collectionDeliveryInstructions ? (
+              <Text className="text-xs text-destructive mt-1">
+                {fieldErrors.collectionDeliveryInstructions}
+              </Text>
+            ) : null}
+          </>
+        ) : null}
       </View>
 
       <View className="bg-card rounded-xl border border-border p-4 mb-3">

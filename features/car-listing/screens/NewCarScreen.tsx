@@ -120,6 +120,11 @@ export default function NewCarScreen() {
         depositAmount: state.depositAmount.trim() ? Number(state.depositAmount) : undefined,
         fuelPolicy: state.fuelPolicy || undefined,
         fuelPolicyNote: state.fuelPolicyNote.trim() || undefined,
+        collectionMethods: state.collectionMethods,
+        collectionInPersonInstructions: state.collectionInPersonInstructions.trim() || undefined,
+        collectionLockboxCode: state.collectionLockboxCode.trim() || undefined,
+        collectionLockboxInstructions: state.collectionLockboxInstructions.trim() || undefined,
+        collectionDeliveryInstructions: state.collectionDeliveryInstructions.trim() || undefined,
         idempotencyKey,
         location: {
           city: state.city.trim(),
@@ -201,6 +206,11 @@ export default function NewCarScreen() {
             depositAmount={wizard.state.depositAmount}
             fuelPolicy={wizard.state.fuelPolicy}
             fuelPolicyNote={wizard.state.fuelPolicyNote}
+            collectionMethods={wizard.state.collectionMethods}
+            collectionInPersonInstructions={wizard.state.collectionInPersonInstructions}
+            collectionLockboxCode={wizard.state.collectionLockboxCode}
+            collectionLockboxInstructions={wizard.state.collectionLockboxInstructions}
+            collectionDeliveryInstructions={wizard.state.collectionDeliveryInstructions}
             isSearchingAddress={wizard.state.isSearchingAddress}
             fieldErrors={wizard.state.fieldErrors}
             t={t}
@@ -264,6 +274,30 @@ export default function NewCarScreen() {
               wizard.clearError("fuelPolicy");
             }}
             onFuelPolicyNoteChange={(value) => wizard.setField("fuelPolicyNote", value)}
+            onToggleCollectionMethod={(value) => {
+              const selected = wizard.state.collectionMethods;
+              const hasValue = selected.includes(value);
+              if (hasValue && selected.length === 1) return;
+              const next = hasValue
+                ? selected.filter((entry) => entry !== value)
+                : [...selected, value];
+              wizard.setField("collectionMethods", next);
+              wizard.clearError("collectionMethods");
+            }}
+            onCollectionInPersonInstructionsChange={(value) =>
+              wizard.setField("collectionInPersonInstructions", value)
+            }
+            onCollectionLockboxCodeChange={(value) => {
+              wizard.setField("collectionLockboxCode", value);
+              wizard.clearError("collectionLockboxCode");
+            }}
+            onCollectionLockboxInstructionsChange={(value) =>
+              wizard.setField("collectionLockboxInstructions", value)
+            }
+            onCollectionDeliveryInstructionsChange={(value) => {
+              wizard.setField("collectionDeliveryInstructions", value);
+              wizard.clearError("collectionDeliveryInstructions");
+            }}
           />
         ) : null}
 

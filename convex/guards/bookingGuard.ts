@@ -22,7 +22,8 @@ export async function assertCarIsBookable(
       q.and(
         q.or(
           q.eq(q.field("status"), "payment_pending"),
-          q.eq(q.field("status"), "confirmed")
+          q.eq(q.field("status"), "confirmed"),
+          q.eq(q.field("status"), "in_progress")
         ),
         q.lte(q.field("startDate"), endDate),
         q.gte(q.field("endDate"), startDate)

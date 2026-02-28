@@ -6,6 +6,7 @@ import { ActionCache } from "@convex-dev/action-cache";
 import { mapHost } from "../../../hostMapper";
 import { mapClerkUser } from "../../../userMapper";
 import { components, internal } from "../../../_generated/api";
+import { normalizeCollectionMethods } from "../domain";
 
 type CarLocation = {
   city: string;
@@ -32,6 +33,11 @@ type UpsertCarPayload = {
   depositAmount?: number;
   fuelPolicy?: string;
   fuelPolicyNote?: string;
+  collectionMethods?: string[];
+  collectionInPersonInstructions?: string;
+  collectionLockboxCode?: string;
+  collectionLockboxInstructions?: string;
+  collectionDeliveryInstructions?: string;
   location: CarLocation;
 };
 
@@ -40,6 +46,35 @@ const EXTERNAL_API_RATE_WINDOW_MS = 60 * 1000;
 const VIN_LOOKUP_LIMIT_PER_WINDOW = 6;
 const ADDRESS_SEARCH_LIMIT_PER_WINDOW = 30;
 const ADDRESS_DETAILS_LIMIT_PER_WINDOW = 30;
+
+function buildCollectionConfig(args: UpsertCarPayload) {
+  const collectionMethods = normalizeCollectionMethods(args.collectionMethods);
+  const inPersonInstructions = args.collectionInPersonInstructions?.trim() || undefined;
+  const lockboxCode = args.collectionLockboxCode?.trim() || undefined;
+  const lockboxInstructions = args.collectionLockboxInstructions?.trim() || undefined;
+  const deliveryInstructions = args.collectionDeliveryInstructions?.trim() || undefined;
+
+  if (collectionMethods.includes("lockbox") && !lockboxCode) {
+    throw new Error("Lockbox code is required when lockbox collection is enabled.");
+  }
+  if (collectionMethods.includes("host_delivery") && !deliveryInstructions) {
+    throw new Error("Delivery instructions are required when host delivery is enabled.");
+  }
+
+  return {
+    collectionMethods,
+    collectionInPersonInstructions: collectionMethods.includes("in_person")
+      ? inPersonInstructions
+      : undefined,
+    collectionLockboxCode: collectionMethods.includes("lockbox") ? lockboxCode : undefined,
+    collectionLockboxInstructions: collectionMethods.includes("lockbox")
+      ? lockboxInstructions
+      : undefined,
+    collectionDeliveryInstructions: collectionMethods.includes("host_delivery")
+      ? deliveryInstructions
+      : undefined,
+  };
+}
 
 function validateCarPayload(args: UpsertCarPayload) {
   const maxYear = new Date().getFullYear() + 1;
@@ -69,6 +104,8 @@ function validateCarPayload(args: UpsertCarPayload) {
   if (args.fuelPolicy !== undefined && !FUEL_POLICIES.includes(args.fuelPolicy as (typeof FUEL_POLICIES)[number])) {
     throw new Error("Fuel policy is invalid.");
   }
+
+  return buildCollectionConfig(args);
 }
 
 async function resolveImageUrls(
@@ -105,6 +142,15 @@ export const createCar = mutation({
     depositAmount: v.optional(v.number()),
     fuelPolicy: v.optional(v.string()),
     fuelPolicyNote: v.optional(v.string()),
+    collectionMethods: v.optional(
+      v.array(
+        v.union(v.literal("in_person"), v.literal("lockbox"), v.literal("host_delivery")),
+      ),
+    ),
+    collectionInPersonInstructions: v.optional(v.string()),
+    collectionLockboxCode: v.optional(v.string()),
+    collectionLockboxInstructions: v.optional(v.string()),
+    collectionDeliveryInstructions: v.optional(v.string()),
     idempotencyKey: v.string(),
     location: v.object({
       city: v.string(),
@@ -121,7 +167,7 @@ export const createCar = mutation({
     if (!idempotencyKey) {
       throw new Error("Missing idempotency key.");
     }
-    validateCarPayload(args);
+    const collectionConfig = validateCarPayload(args);
 
     const images = await resolveImageUrls(ctx, args.imageStorageIds);
 
@@ -153,6 +199,11 @@ export const createCar = mutation({
       depositAmount: args.depositAmount,
       fuelPolicy: args.fuelPolicy || undefined,
       fuelPolicyNote: args.fuelPolicyNote?.trim() || undefined,
+      collectionMethods: collectionConfig.collectionMethods,
+      collectionInPersonInstructions: collectionConfig.collectionInPersonInstructions,
+      collectionLockboxCode: collectionConfig.collectionLockboxCode,
+      collectionLockboxInstructions: collectionConfig.collectionLockboxInstructions,
+      collectionDeliveryInstructions: collectionConfig.collectionDeliveryInstructions,
       isCarVerified: false,
       verificationSource: undefined,
       verifiedAt: undefined,
@@ -212,6 +263,15 @@ export const updateHostCar = mutation({
     depositAmount: v.optional(v.number()),
     fuelPolicy: v.optional(v.string()),
     fuelPolicyNote: v.optional(v.string()),
+    collectionMethods: v.optional(
+      v.array(
+        v.union(v.literal("in_person"), v.literal("lockbox"), v.literal("host_delivery")),
+      ),
+    ),
+    collectionInPersonInstructions: v.optional(v.string()),
+    collectionLockboxCode: v.optional(v.string()),
+    collectionLockboxInstructions: v.optional(v.string()),
+    collectionDeliveryInstructions: v.optional(v.string()),
     location: v.object({
       city: v.string(),
       country: v.string(),
@@ -232,7 +292,7 @@ export const updateHostCar = mutation({
       throw new Error("Unauthorized: You cannot edit this listing.");
     }
 
-    validateCarPayload(args);
+    const collectionConfig = validateCarPayload(args);
 
     let images = car.images;
     if (args.imageStorageIds !== undefined) {
@@ -262,6 +322,11 @@ export const updateHostCar = mutation({
       depositAmount: args.depositAmount,
       fuelPolicy: args.fuelPolicy || undefined,
       fuelPolicyNote: args.fuelPolicyNote?.trim() || undefined,
+      collectionMethods: collectionConfig.collectionMethods,
+      collectionInPersonInstructions: collectionConfig.collectionInPersonInstructions,
+      collectionLockboxCode: collectionConfig.collectionLockboxCode,
+      collectionLockboxInstructions: collectionConfig.collectionLockboxInstructions,
+      collectionDeliveryInstructions: collectionConfig.collectionDeliveryInstructions,
       isCarVerified: car.isCarVerified ?? false,
       verificationSource: car.verificationSource || undefined,
       verifiedAt: car.verifiedAt || undefined,
@@ -1868,6 +1933,10 @@ export const getCarOfferById = query({
         depositAmount: car.depositAmount ?? 0,
         fuelPolicy: car.fuelPolicy ?? null,
         fuelPolicyNote: car.fuelPolicyNote ?? null,
+        collectionMethods: normalizeCollectionMethods(car.collectionMethods),
+        collectionInPersonInstructions: car.collectionInPersonInstructions ?? null,
+        collectionLockboxInstructions: car.collectionLockboxInstructions ?? null,
+        collectionDeliveryInstructions: car.collectionDeliveryInstructions ?? null,
         isCarVerified: Boolean(car.isCarVerified),
         images: car.images ?? [],
         location: car.location,

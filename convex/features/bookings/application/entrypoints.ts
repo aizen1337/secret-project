@@ -13,6 +13,19 @@ import {
 } from "../domain/bookingPolicies";
 
 const internalApi: any = internal;
+const LOCKBOX_REVEAL_WINDOW_MS = 2 * 60 * 60 * 1000;
+type CollectionMethod = "in_person" | "lockbox" | "host_delivery";
+
+function normalizeCollectionMethod(method: unknown): CollectionMethod {
+  if (method === "lockbox" || method === "host_delivery") return method;
+  return "in_person";
+}
+
+function getCollectionInstructions(booking: any, method: CollectionMethod) {
+  if (method === "lockbox") return booking.collectionLockboxInstructions ?? null;
+  if (method === "host_delivery") return booking.collectionDeliveryInstructions ?? null;
+  return booking.collectionInPersonInstructions ?? null;
+}
 
 async function getChatMetaForBooking(
   ctx: any,
@@ -282,6 +295,16 @@ export const getBookingDetails = query({
       )
       .first();
     const canReview = booking.status === "completed" && !myReview;
+    const collectionMethod = normalizeCollectionMethod(booking.collectionMethod);
+    const collectionInstructions = getCollectionInstructions(booking, collectionMethod);
+    const tripStartTs = new Date(booking.startDate).getTime();
+    const lockboxCodeVisibleAt =
+      Number.isFinite(tripStartTs) && collectionMethod === "lockbox"
+        ? tripStartTs - LOCKBOX_REVEAL_WINDOW_MS
+        : null;
+    const isLockboxCodeVisible =
+      collectionMethod === "lockbox" &&
+      (isHost || (isRenter && typeof lockboxCodeVisibleAt === "number" && Date.now() >= lockboxCodeVisibleAt));
 
     return {
       viewerRole: isHost ? "host" : "renter",
@@ -341,6 +364,16 @@ export const getBookingDetails = query({
       canCancel,
       canPayNow,
       canReview,
+      collection: {
+        method: collectionMethod,
+        instructions: collectionInstructions,
+        hostCollectionConfirmedAt: booking.hostCollectionConfirmedAt ?? null,
+        renterCollectionConfirmedAt: booking.renterCollectionConfirmedAt ?? null,
+        tripStartedAt: booking.tripStartedAt ?? null,
+        lockboxCode: isLockboxCodeVisible ? booking.collectionLockboxCode ?? null : null,
+        lockboxCodeVisibleAt,
+        isLockboxCodeVisible,
+      },
       myReview: myReview
         ? {
             id: myReview._id,
@@ -606,6 +639,76 @@ export const listHostBookingsWithPayouts = query({
     });
 
     return enriched.sort((a, b) => b.payment.createdAt - a.payment.createdAt);
+  },
+});
+
+export const confirmTripStartCollection = mutation({
+  args: {
+    bookingId: v.id("bookings"),
+  },
+  async handler(ctx, args) {
+    const user = await mapClerkUser(ctx);
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) {
+      throw new Error("NOT_FOUND: Booking not found.");
+    }
+
+    const car = await ctx.db.get(booking.carId);
+    if (!car) {
+      throw new Error("NOT_FOUND: Car not found for booking.");
+    }
+
+    const host = await ctx.db.get(car.hostId);
+    if (!host) {
+      throw new Error("NOT_FOUND: Host not found for booking.");
+    }
+
+    const isRenter = String(booking.renterId) === String(user._id);
+    const isHost = String(host.userId) === String(user._id);
+    if (!isRenter && !isHost) {
+      throw new Error("UNAUTHORIZED: You cannot confirm this trip start.");
+    }
+    if (booking.status !== "confirmed" && booking.status !== "in_progress") {
+      throw new Error("INVALID_INPUT: Trip start confirmation is unavailable for this booking.");
+    }
+
+    const tripStartTs = new Date(booking.startDate).getTime();
+    if (!Number.isFinite(tripStartTs)) {
+      throw new Error("INVALID_INPUT: Booking start date is invalid.");
+    }
+    const lockboxCodeVisibleAt = tripStartTs - LOCKBOX_REVEAL_WINDOW_MS;
+    const now = Date.now();
+    if (now < lockboxCodeVisibleAt) {
+      throw new Error("INVALID_INPUT: Trip collection can be confirmed only near the trip start.");
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (isHost && !booking.hostCollectionConfirmedAt) {
+      patch.hostCollectionConfirmedAt = now;
+    }
+    if (isRenter && !booking.renterCollectionConfirmedAt) {
+      patch.renterCollectionConfirmedAt = now;
+    }
+    if (isRenter && booking.status === "confirmed") {
+      patch.status = "in_progress";
+    }
+    if (isRenter && !booking.tripStartedAt) {
+      patch.tripStartedAt = now;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      patch.updatedAt = now;
+      await ctx.db.patch(booking._id, patch);
+    }
+
+    return {
+      ok: true,
+      status: (patch.status ?? booking.status) as string,
+      hostCollectionConfirmedAt: (patch.hostCollectionConfirmedAt ?? booking.hostCollectionConfirmedAt ?? null) as number | null,
+      renterCollectionConfirmedAt: (patch.renterCollectionConfirmedAt ?? booking.renterCollectionConfirmedAt ?? null) as number | null,
+      tripStartedAt: (patch.tripStartedAt ?? booking.tripStartedAt ?? null) as number | null,
+      lockboxCodeVisibleAt,
+    };
   },
 });
 

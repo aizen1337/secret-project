@@ -5,6 +5,7 @@ import { mapClerkUser } from "../../../userMapper";
 import { assertRenterCanBook } from "../../../guards/renterVerificationGuard";
 import { assertAllowedRedirectUrl } from "../../../guards/redirectUrlGuard";
 import { assertAdminFromClerkRoleClaim } from "../../../guards/adminGuard";
+import { resolveSelectedCollectionMethod } from "../../cars/domain";
 
 type PaymentStrategy = "destination_manual_capture" | "platform_transfer_fallback";
 const internalApi: any = internal;
@@ -72,7 +73,7 @@ function calculateDaysInclusive(startTs: number, endTs: number) {
 }
 
 function isReservationBlockingStatus(status: string) {
-  return status === "payment_pending" || status === "confirmed";
+  return status === "payment_pending" || status === "confirmed" || status === "in_progress";
 }
 
 function datesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string) {
@@ -225,6 +226,9 @@ export const createCheckoutSession = action({
     cancelUrl: v.string(),
     startDate: v.string(),
     endDate: v.string(),
+    collectionMethod: v.optional(
+      v.union(v.literal("in_person"), v.literal("lockbox"), v.literal("host_delivery")),
+    ),
   },
   async handler(ctx, args) {
     if (process.env.ENABLE_CONNECT_PAYOUTS === "false") {
@@ -245,6 +249,7 @@ export const createCheckoutSession = action({
       startDate: args.startDate,
       endDate: args.endDate,
       currency: "usd",
+      collectionMethod: args.collectionMethod,
     });
 
     const stripeCustomerId = await ensureStripeCustomerForRenter(ctx, {
@@ -532,6 +537,9 @@ export const createPendingBookingPaymentInternal = internalMutation({
     startDate: v.string(),
     endDate: v.string(),
     currency: v.optional(v.string()),
+    collectionMethod: v.optional(
+      v.union(v.literal("in_person"), v.literal("lockbox"), v.literal("host_delivery")),
+    ),
   },
   async handler(ctx, args) {
     const user = await mapClerkUser(ctx);
@@ -574,6 +582,17 @@ export const createPendingBookingPaymentInternal = internalMutation({
       throw new Error("UNAVAILABLE: Host has not completed payout onboarding yet.");
     }
 
+    const collectionMethod = resolveSelectedCollectionMethod({
+      requested: args.collectionMethod,
+      available: car.collectionMethods,
+    });
+    if (collectionMethod === "lockbox" && !car.collectionLockboxCode) {
+      throw new Error("INVALID_INPUT: Selected lockbox collection is unavailable for this listing.");
+    }
+    if (collectionMethod === "host_delivery" && !car.collectionDeliveryInstructions) {
+      throw new Error("INVALID_INPUT: Selected host delivery is unavailable for this listing.");
+    }
+
     const rentalAmount = car.pricePerDay * days;
     const platformFeeAmount = Math.round(rentalAmount * 0.1);
     const hostAmount = rentalAmount - platformFeeAmount;
@@ -590,6 +609,17 @@ export const createPendingBookingPaymentInternal = internalMutation({
       endDate: args.endDate,
       totalPrice: rentalAmount,
       status: "pending",
+      collectionMethod,
+      collectionInPersonInstructions:
+        collectionMethod === "in_person" ? car.collectionInPersonInstructions ?? undefined : undefined,
+      collectionLockboxCode:
+        collectionMethod === "lockbox" ? car.collectionLockboxCode ?? undefined : undefined,
+      collectionLockboxInstructions:
+        collectionMethod === "lockbox" ? car.collectionLockboxInstructions ?? undefined : undefined,
+      collectionDeliveryInstructions:
+        collectionMethod === "host_delivery"
+          ? car.collectionDeliveryInstructions ?? undefined
+          : undefined,
       createdAt: now,
       updatedAt: now,
     });
