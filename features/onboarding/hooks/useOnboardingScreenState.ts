@@ -41,7 +41,6 @@ export function useOnboardingScreenState() {
   const finalizeOnboarding = useMutation(onboardingApi.finalizeOnboarding) as any;
   const syncRenterVerificationSession = useAction(onboardingApi.syncRenterVerificationSession) as any;
   const refreshHostConnectStatus = useAction(onboardingApi.refreshHostConnectStatus) as any;
-  const startRenterIdentityCheck = useAction(onboardingApi.startRenterIdentityCheck) as any;
   const startRenterDriverLicenseCheck = useAction(onboardingApi.startRenterDriverLicenseCheck) as any;
   const createHostOnboardingLink = useAction(onboardingApi.createHostOnboardingLink) as any;
 
@@ -73,9 +72,9 @@ export function useOnboardingScreenState() {
     router,
     setOnboardingRole,
     finalizeOnboarding,
-    startRenterIdentityCheck,
     startRenterDriverLicenseCheck,
     createHostOnboardingLink,
+    refreshHostConnectStatus,
     toast,
   });
 

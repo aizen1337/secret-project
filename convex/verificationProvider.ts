@@ -1,12 +1,12 @@
 import type { VerificationCheckType, VerificationProvider } from "./verificationPolicy";
 import {
-  createPolandLocalVerificationSession,
-  fetchPolandLocalVerificationSession,
-} from "./verificationProviderPolandLocal";
-import {
   createStripeVerificationSession,
   fetchStripeVerificationSession,
 } from "./verificationProviderStripe";
+import {
+  createMobywatelVerificationSession,
+  fetchMobywatelVerificationSession,
+} from "./verificationProviderMobywatel";
 
 export type CreateVerificationSessionArgs = {
   checkType: VerificationCheckType;
@@ -41,10 +41,10 @@ export function getVerificationProvider(provider: VerificationProvider): Verific
       fetchSession: fetchStripeVerificationSession,
     };
   }
-  if (provider === "poland_local") {
+  if (provider === "mobywatel") {
     return {
-      createSession: createPolandLocalVerificationSession,
-      fetchSession: fetchPolandLocalVerificationSession,
+      createSession: createMobywatelVerificationSession,
+      fetchSession: fetchMobywatelVerificationSession,
     };
   }
   throw new Error(`Unsupported verification provider: ${provider}`);

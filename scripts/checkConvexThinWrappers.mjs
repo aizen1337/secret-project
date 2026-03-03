@@ -16,7 +16,6 @@ const wrapperFiles = [
   "convex/users.ts",
   "convex/verification.ts",
   "convex/recentSearches.ts",
-  "convex/identity.ts",
 ];
 
 const bannedPatterns = [

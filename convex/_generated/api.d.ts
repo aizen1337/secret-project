@@ -52,9 +52,9 @@ import type * as features_search_domain_index from "../features/search/domain/in
 import type * as features_search_infrastructure_index from "../features/search/infrastructure/index.js";
 import type * as features_users_application_authMigrationEntrypoints from "../features/users/application/authMigrationEntrypoints.js";
 import type * as features_users_application_entrypoints from "../features/users/application/entrypoints.js";
-import type * as features_users_application_identityEntrypoints from "../features/users/application/identityEntrypoints.js";
 import type * as features_users_application_verificationEntrypoints from "../features/users/application/verificationEntrypoints.js";
 import type * as features_users_contracts_index from "../features/users/contracts/index.js";
+import type * as features_users_domain_hostVerificationState from "../features/users/domain/hostVerificationState.js";
 import type * as features_users_domain_index from "../features/users/domain/index.js";
 import type * as features_users_infrastructure_index from "../features/users/infrastructure/index.js";
 import type * as guards_adminGuard from "../guards/adminGuard.js";
@@ -63,7 +63,6 @@ import type * as guards_redirectUrlGuard from "../guards/redirectUrlGuard.js";
 import type * as guards_renterVerificationGuard from "../guards/renterVerificationGuard.js";
 import type * as hostMapper from "../hostMapper.js";
 import type * as http from "../http.js";
-import type * as identity from "../identity.js";
 import type * as loadtest from "../loadtest.js";
 import type * as loadtestSynthetic from "../loadtestSynthetic.js";
 import type * as recentSearches from "../recentSearches.js";
@@ -77,7 +76,7 @@ import type * as users from "../users.js";
 import type * as verification from "../verification.js";
 import type * as verificationPolicy from "../verificationPolicy.js";
 import type * as verificationProvider from "../verificationProvider.js";
-import type * as verificationProviderPolandLocal from "../verificationProviderPolandLocal.js";
+import type * as verificationProviderMobywatel from "../verificationProviderMobywatel.js";
 import type * as verificationProviderStripe from "../verificationProviderStripe.js";
 
 import type {
@@ -131,9 +130,9 @@ declare const fullApi: ApiFromModules<{
   "features/search/infrastructure/index": typeof features_search_infrastructure_index;
   "features/users/application/authMigrationEntrypoints": typeof features_users_application_authMigrationEntrypoints;
   "features/users/application/entrypoints": typeof features_users_application_entrypoints;
-  "features/users/application/identityEntrypoints": typeof features_users_application_identityEntrypoints;
   "features/users/application/verificationEntrypoints": typeof features_users_application_verificationEntrypoints;
   "features/users/contracts/index": typeof features_users_contracts_index;
+  "features/users/domain/hostVerificationState": typeof features_users_domain_hostVerificationState;
   "features/users/domain/index": typeof features_users_domain_index;
   "features/users/infrastructure/index": typeof features_users_infrastructure_index;
   "guards/adminGuard": typeof guards_adminGuard;
@@ -142,7 +141,6 @@ declare const fullApi: ApiFromModules<{
   "guards/renterVerificationGuard": typeof guards_renterVerificationGuard;
   hostMapper: typeof hostMapper;
   http: typeof http;
-  identity: typeof identity;
   loadtest: typeof loadtest;
   loadtestSynthetic: typeof loadtestSynthetic;
   recentSearches: typeof recentSearches;
@@ -156,7 +154,7 @@ declare const fullApi: ApiFromModules<{
   verification: typeof verification;
   verificationPolicy: typeof verificationPolicy;
   verificationProvider: typeof verificationProvider;
-  verificationProviderPolandLocal: typeof verificationProviderPolandLocal;
+  verificationProviderMobywatel: typeof verificationProviderMobywatel;
   verificationProviderStripe: typeof verificationProviderStripe;
 }>;
 

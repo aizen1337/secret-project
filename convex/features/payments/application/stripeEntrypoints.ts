@@ -689,7 +689,7 @@ export const createPendingBookingPaymentInternal = internalMutation({
     if (String(host.userId) === String(user._id)) {
       throw new Error("UNAUTHORIZED: You cannot book your own listing.");
     }
-    const paymentStrategy = resolvePaymentStrategyForHost(host);
+    const hostPaymentStrategy = resolvePaymentStrategyForHost(host);
 
     const collectionMethod = resolveSelectedCollectionMethod({
       requested: args.collectionMethod,
@@ -707,6 +707,11 @@ export const createPendingBookingPaymentInternal = internalMutation({
     const hostAmount = rentalAmount - platformFeeAmount;
     const depositAmount = Number(car.depositAmount ?? 0);
     const paymentDueAt = startTs - DAY_MS;
+    const requiresImmediatePayment = paymentDueAt <= Date.now();
+    const paymentStrategy: PaymentStrategy =
+      hostPaymentStrategy === "destination_manual_capture" && requiresImmediatePayment
+        ? "platform_transfer_fallback"
+        : hostPaymentStrategy;
     const releaseAt = endTs;
     const depositClaimWindowEndsAt = releaseAt + DEPOSIT_CLAIM_WINDOW_MS;
     const now = Date.now();
@@ -779,7 +784,7 @@ export const createPendingBookingPaymentInternal = internalMutation({
       depositAmount,
       totalAmount: rentalAmount + platformFeeAmount + depositAmount,
       paymentDueAt,
-      requiresImmediatePayment: paymentDueAt <= Date.now(),
+      requiresImmediatePayment,
     };
   },
 });
@@ -1134,14 +1139,37 @@ export const updateHostStripeStatusInternal = internalMutation({
     stripeOnboardingComplete: v.boolean(),
     stripeChargesEnabled: v.boolean(),
     stripePayoutsEnabled: v.boolean(),
+    stripeRequirementsCurrentlyDue: v.optional(v.array(v.string())),
+    stripeRequirementsPastDue: v.optional(v.array(v.string())),
+    stripeRequirementsEventuallyDue: v.optional(v.array(v.string())),
+    stripeRequirementsPendingVerification: v.optional(v.array(v.string())),
+    stripeRequirementsDisabledReason: v.optional(v.union(v.string(), v.null())),
   },
   async handler(ctx, args) {
+    const requirementsPatch: Record<string, unknown> = {};
+    if (args.stripeRequirementsCurrentlyDue !== undefined) {
+      requirementsPatch.stripeRequirementsCurrentlyDue = args.stripeRequirementsCurrentlyDue;
+    }
+    if (args.stripeRequirementsPastDue !== undefined) {
+      requirementsPatch.stripeRequirementsPastDue = args.stripeRequirementsPastDue;
+    }
+    if (args.stripeRequirementsEventuallyDue !== undefined) {
+      requirementsPatch.stripeRequirementsEventuallyDue = args.stripeRequirementsEventuallyDue;
+    }
+    if (args.stripeRequirementsPendingVerification !== undefined) {
+      requirementsPatch.stripeRequirementsPendingVerification = args.stripeRequirementsPendingVerification;
+    }
+    if (args.stripeRequirementsDisabledReason !== undefined) {
+      requirementsPatch.stripeRequirementsDisabledReason = args.stripeRequirementsDisabledReason;
+    }
+
     await ctx.db.patch(args.hostId, {
-      isVerified: args.stripePayoutsEnabled,
+      isVerified: args.stripeOnboardingComplete,
       stripeConnectAccountId: args.stripeConnectAccountId,
       stripeOnboardingComplete: args.stripeOnboardingComplete,
       stripeChargesEnabled: args.stripeChargesEnabled,
       stripePayoutsEnabled: args.stripePayoutsEnabled,
+      ...requirementsPatch,
       updatedAt: Date.now(),
     });
   },

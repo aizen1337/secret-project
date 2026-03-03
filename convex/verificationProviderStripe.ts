@@ -85,13 +85,9 @@ export async function createStripeVerificationSession(
 }
 
 function parseStripeCheckType(metadata?: Record<string, string>): VerificationCheckType | undefined {
-  if (metadata?.checkType === "driver_license" || metadata?.verificationType === "driver_license") {
-    return "driver_license";
-  }
-  if (metadata?.checkType === "identity" || metadata?.verificationType === "identity") {
-    return "identity";
-  }
-  return undefined;
+  return metadata?.checkType === "driver_license" || metadata?.verificationType === "driver_license"
+    ? "driver_license"
+    : undefined;
 }
 
 export async function fetchStripeVerificationSession(

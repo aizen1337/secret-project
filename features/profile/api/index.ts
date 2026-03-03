@@ -9,6 +9,5 @@ export const profileApi = {
   getUserReviewSummary: api.bookingReviews.getUserReviewSummary,
   createHostOnboardingLink: api.stripeConnect.createHostOnboardingLink,
   refreshHostConnectStatus: api.stripeConnect.refreshHostConnectStatus,
-  startRenterIdentityCheck: api.verification.startRenterIdentityCheck,
   startRenterDriverLicenseCheck: api.verification.startRenterDriverLicenseCheck,
 };

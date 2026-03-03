@@ -7,7 +7,6 @@ export const onboardingApi = {
   beginSignupOnboarding: api.users.beginSignupOnboarding,
   setOnboardingRole: api.users.setOnboardingRole,
   finalizeOnboarding: api.users.finalizeOnboarding,
-  startRenterIdentityCheck: api.verification.startRenterIdentityCheck,
   startRenterDriverLicenseCheck: api.verification.startRenterDriverLicenseCheck,
   syncRenterVerificationSession: api.verification.syncRenterVerificationSession,
   createHostOnboardingLink: api.stripeConnect.createHostOnboardingLink,

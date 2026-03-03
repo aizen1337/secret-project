@@ -442,12 +442,29 @@ export const handleStripeWebhookInternal = internalAction({
             stripeConnectAccountId: object.id,
           });
           if (host) {
+            const requirements = object?.requirements ?? {};
             await ctx.runMutation(internal.stripe.updateHostStripeStatusInternal, {
               hostId: host._id,
               stripeConnectAccountId: object.id,
               stripeOnboardingComplete: Boolean(object.details_submitted),
               stripeChargesEnabled: Boolean(object.charges_enabled),
               stripePayoutsEnabled: Boolean(object.payouts_enabled),
+              stripeRequirementsCurrentlyDue: Array.isArray(requirements.currently_due)
+                ? requirements.currently_due
+                : [],
+              stripeRequirementsPastDue: Array.isArray(requirements.past_due)
+                ? requirements.past_due
+                : [],
+              stripeRequirementsEventuallyDue: Array.isArray(requirements.eventually_due)
+                ? requirements.eventually_due
+                : [],
+              stripeRequirementsPendingVerification: Array.isArray(requirements.pending_verification)
+                ? requirements.pending_verification
+                : [],
+              stripeRequirementsDisabledReason:
+                typeof requirements.disabled_reason === "string"
+                  ? requirements.disabled_reason
+                  : null,
             });
           }
         }
@@ -455,15 +472,10 @@ export const handleStripeWebhookInternal = internalAction({
       }
       case "identity.verification_session.processing": {
         if (typeof object.id === "string") {
-          const checkType =
-            object?.metadata?.checkType === "driver_license" ||
-            object?.metadata?.verificationType === "driver_license"
-              ? "driver_license"
-              : "identity";
           await ctx.runMutation(internal.verification.updateCheckFromProviderSessionInternal, {
             providerSessionId: object.id,
             subjectType: "renter",
-            checkType,
+            checkType: "driver_license",
             provider: "stripe",
             status: "pending",
           });
@@ -472,15 +484,10 @@ export const handleStripeWebhookInternal = internalAction({
       }
       case "identity.verification_session.verified": {
         if (typeof object.id === "string") {
-          const checkType =
-            object?.metadata?.checkType === "driver_license" ||
-            object?.metadata?.verificationType === "driver_license"
-              ? "driver_license"
-              : "identity";
           await ctx.runMutation(internal.verification.updateCheckFromProviderSessionInternal, {
             providerSessionId: object.id,
             subjectType: "renter",
-            checkType,
+            checkType: "driver_license",
             provider: "stripe",
             status: "verified",
           });
@@ -490,11 +497,6 @@ export const handleStripeWebhookInternal = internalAction({
       case "identity.verification_session.requires_input":
       case "identity.verification_session.canceled": {
         if (typeof object.id === "string") {
-          const checkType =
-            object?.metadata?.checkType === "driver_license" ||
-            object?.metadata?.verificationType === "driver_license"
-              ? "driver_license"
-              : "identity";
           const rejectionReason =
             typeof object?.last_error?.reason === "string"
               ? object.last_error.reason
@@ -504,7 +506,7 @@ export const handleStripeWebhookInternal = internalAction({
           await ctx.runMutation(internal.verification.updateCheckFromProviderSessionInternal, {
             providerSessionId: object.id,
             subjectType: "renter",
-            checkType,
+            checkType: "driver_license",
             provider: "stripe",
             status: "rejected",
             rejectionReason,

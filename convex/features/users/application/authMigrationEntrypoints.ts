@@ -1,4 +1,4 @@
-import { internalMutation, query } from "../../../_generated/server";
+import { internalMutation, internalQuery } from "../../../_generated/server";
 import { v } from "convex/values";
 
 function normalizeEmail(value: unknown): string | undefined {
@@ -45,7 +45,7 @@ export const backfillUserEmailFromClerkInternal = internalMutation({
   },
 });
 
-export const markBetterAuthReadyInternal = query({
+export const markBetterAuthReadyInternal = internalQuery({
   args: {
     sampleSize: v.optional(v.number()),
   },

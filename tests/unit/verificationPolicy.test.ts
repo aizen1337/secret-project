@@ -6,17 +6,16 @@ import {
 } from "../../convex/verificationPolicy";
 
 describe("verificationPolicy", () => {
-  it("defaults verification provider to poland_local", () => {
-    expect(resolveDefaultVerificationProvider(undefined)).toBe("poland_local");
-    expect(resolveDefaultVerificationProvider("")).toBe("poland_local");
-    expect(resolveDefaultVerificationProvider("unknown")).toBe("poland_local");
-    expect(resolveDefaultVerificationProvider("poland_local")).toBe("poland_local");
+  it("defaults verification provider to stripe", () => {
+    expect(resolveDefaultVerificationProvider(undefined)).toBe("stripe");
+    expect(resolveDefaultVerificationProvider("")).toBe("stripe");
+    expect(resolveDefaultVerificationProvider("unknown")).toBe("stripe");
+    expect(resolveDefaultVerificationProvider("mobywatel")).toBe("mobywatel");
     expect(resolveDefaultVerificationProvider("stripe")).toBe("stripe");
   });
 
   it("keeps renter booking gate on driver_license", () => {
     const blocked = evaluateRenterBookingEligibility({
-      identity: "verified",
       driver_license: "pending",
     });
     expect(blocked.readyToBook).toBe(false);
@@ -24,7 +23,6 @@ describe("verificationPolicy", () => {
     expect(blocked.missingChecks).toEqual(["driver_license"]);
 
     const allowed = evaluateRenterBookingEligibility({
-      identity: "unverified",
       driver_license: "verified",
     });
     expect(allowed.readyToBook).toBe(true);

@@ -25,10 +25,19 @@ export function useOnboardingQueries(isSignedIn: boolean) {
   const hasAnyOnboardingState = Boolean(convexUser?.onboardingStatus || selectedRole);
   const renterReady = Boolean(renterVerification?.readyToBook);
   const renterEnabled = renterVerification?.enabled ?? false;
-  const identityStatus = renterVerification?.identityStatus ?? "unverified";
   const driverLicenseStatus = renterVerification?.driverLicenseStatus ?? "unverified";
   const hostReady = Boolean(hostPayoutStatus?.payoutsEnabled);
+  const hostVerified = Boolean(hostPayoutStatus?.hostVerified);
   const hasConnectAccount = Boolean(hostPayoutStatus?.hasConnectAccount);
+  const hostOnboardingComplete = Boolean(hostPayoutStatus?.onboardingComplete);
+  const hostChargesEnabled = Boolean(hostPayoutStatus?.chargesEnabled);
+  const hostPayoutsEnabled = Boolean(hostPayoutStatus?.payoutsEnabled);
+  const hostVerificationState = hostPayoutStatus?.verificationState ?? "unverified";
+  const hostRequiredActions = Array.isArray(hostPayoutStatus?.requiredActions)
+    ? hostPayoutStatus.requiredActions
+    : [];
+  const hostDisabledReason = hostPayoutStatus?.disabledReason ?? null;
+  const hostIdentityDocumentRequired = Boolean(hostPayoutStatus?.identityDocumentRequired);
   const requiresRenter = selectedRole === "renter" || selectedRole === "both";
   const requiresHost = selectedRole === "host" || selectedRole === "both";
 
@@ -46,10 +55,17 @@ export function useOnboardingQueries(isSignedIn: boolean) {
     hasAnyOnboardingState,
     renterReady,
     renterEnabled,
-    identityStatus,
     driverLicenseStatus,
     hostReady,
+    hostVerified,
     hasConnectAccount,
+    hostOnboardingComplete,
+    hostChargesEnabled,
+    hostPayoutsEnabled,
+    hostVerificationState,
+    hostRequiredActions,
+    hostDisabledReason,
+    hostIdentityDocumentRequired,
     requiresRenter,
     requiresHost,
     activationComplete,

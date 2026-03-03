@@ -36,6 +36,11 @@ export default defineSchema({
     stripeOnboardingComplete: v.optional(v.boolean()),
     stripeChargesEnabled: v.optional(v.boolean()),
     stripePayoutsEnabled: v.optional(v.boolean()),
+    stripeRequirementsCurrentlyDue: v.optional(v.array(v.string())),
+    stripeRequirementsPastDue: v.optional(v.array(v.string())),
+    stripeRequirementsEventuallyDue: v.optional(v.array(v.string())),
+    stripeRequirementsPendingVerification: v.optional(v.array(v.string())),
+    stripeRequirementsDisabledReason: v.optional(v.union(v.string(), v.null())),
     updatedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
@@ -298,43 +303,17 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_car", ["carId"]),
 
-  renter_verifications: defineTable({
-    userId: v.id("users"),
-    identityStatus: v.union(
-      v.literal("unverified"),
-      v.literal("pending"),
-      v.literal("verified"),
-      v.literal("rejected"),
-    ),
-    driverLicenseStatus: v.union(
-      v.literal("unverified"),
-      v.literal("pending"),
-      v.literal("verified"),
-      v.literal("rejected"),
-    ),
-    identitySessionId: v.optional(v.string()),
-    driverLicenseSessionId: v.optional(v.string()),
-    identityVerifiedAt: v.optional(v.number()),
-    driverLicenseVerifiedAt: v.optional(v.number()),
-    rejectionReason: v.optional(v.string()),
-    updatedAt: v.number(),
-    createdAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_identity_session", ["identitySessionId"])
-    .index("by_driver_session", ["driverLicenseSessionId"]),
-
   verification_checks: defineTable({
     userId: v.id("users"),
     subjectType: v.union(v.literal("renter")),
-    checkType: v.union(v.literal("identity"), v.literal("driver_license")),
+    checkType: v.union(v.literal("driver_license")),
     status: v.union(
       v.literal("unverified"),
       v.literal("pending"),
       v.literal("verified"),
       v.literal("rejected"),
     ),
-    provider: v.union(v.literal("stripe"), v.literal("poland_local")),
+    provider: v.union(v.literal("stripe"), v.literal("mobywatel")),
     providerSessionId: v.optional(v.string()),
     verifiedAt: v.optional(v.number()),
     rejectionReason: v.optional(v.string()),

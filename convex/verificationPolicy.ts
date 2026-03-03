@@ -1,7 +1,7 @@
 export type VerificationStatus = "unverified" | "pending" | "verified" | "rejected";
-export type VerificationCheckType = "identity" | "driver_license";
+export type VerificationCheckType = "driver_license";
 export type VerificationSubjectType = "renter";
-export type VerificationProvider = "stripe" | "poland_local";
+export type VerificationProvider = "stripe" | "mobywatel";
 export type VerificationReasonCode =
   | "VERIFICATION_PENDING"
   | "VERIFICATION_REJECTED"
@@ -14,8 +14,8 @@ export function resolveDefaultVerificationProvider(
     .trim()
     .toLowerCase();
   if (normalized === "stripe") return "stripe";
-  if (normalized === "poland_local") return "poland_local";
-  return "poland_local";
+  if (normalized === "mobywatel") return "mobywatel";
+  return "stripe";
 }
 
 export const requiredRenterChecks: VerificationCheckType[] = ["driver_license"];

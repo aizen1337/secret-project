@@ -21,7 +21,7 @@ function isRenterVerificationEnabled() {
   return isEnvTrue("ENABLE_RENTER_VERIFICATION", false);
 }
 
-function getIdentityReturnUrl(override?: string) {
+function getVerificationReturnUrl(override?: string) {
   const raw =
     (override && override.trim()) ||
     process.env.POLAND_VERIFICATION_RETURN_URL ||
@@ -32,7 +32,6 @@ function getIdentityReturnUrl(override?: string) {
 
 function defaultChecks(): Record<VerificationCheckType, VerificationStatus> {
   return {
-    identity: "unverified",
     driver_license: "unverified",
   };
 }
@@ -58,25 +57,11 @@ async function resolveChecksForUser(ctx: any, userId: any) {
     .withIndex("by_user_subject", (q: any) => q.eq("userId", userId).eq("subjectType", "renter"))
     .collect();
 
-  if (genericChecks.length > 0) {
-    for (const row of genericChecks) {
-      checks[row.checkType as VerificationCheckType] = row.status as VerificationStatus;
-      if (!rejectionReason && row.status === "rejected" && row.rejectionReason) {
-        rejectionReason = row.rejectionReason;
-      }
+  for (const row of genericChecks) {
+    checks[row.checkType as VerificationCheckType] = row.status as VerificationStatus;
+    if (!rejectionReason && row.status === "rejected" && row.rejectionReason) {
+      rejectionReason = row.rejectionReason;
     }
-    return { checks, rejectionReason };
-  }
-
-  const legacy = await ctx.db
-    .query("renter_verifications")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .first();
-
-  if (legacy) {
-    checks.identity = legacy.identityStatus;
-    checks.driver_license = legacy.driverLicenseStatus;
-    rejectionReason = legacy.rejectionReason;
   }
 
   return { checks, rejectionReason };
@@ -129,77 +114,8 @@ async function upsertGenericCheck(
   return existing._id;
 }
 
-async function syncLegacyRow(
-  ctx: any,
-  args: {
-    userId: any;
-    checkType: VerificationCheckType;
-    status: VerificationStatus;
-    sessionId?: string;
-    rejectionReason?: string;
-  },
-) {
-  const now = Date.now();
-  const existing = await ctx.db
-    .query("renter_verifications")
-    .withIndex("by_user", (q: any) => q.eq("userId", args.userId))
-    .first();
-
-  const identityStatus = args.checkType === "identity" ? args.status : existing?.identityStatus ?? "unverified";
-  const driverLicenseStatus =
-    args.checkType === "driver_license" ? args.status : existing?.driverLicenseStatus ?? "unverified";
-  const identitySessionId =
-    args.checkType === "identity" ? args.sessionId : existing?.identitySessionId;
-  const driverLicenseSessionId =
-    args.checkType === "driver_license" ? args.sessionId : existing?.driverLicenseSessionId;
-
-  if (!existing) {
-    await ctx.db.insert("renter_verifications", {
-      userId: args.userId,
-      identityStatus,
-      driverLicenseStatus,
-      identitySessionId,
-      driverLicenseSessionId,
-      identityVerifiedAt: args.checkType === "identity" && args.status === "verified" ? now : undefined,
-      driverLicenseVerifiedAt:
-        args.checkType === "driver_license" && args.status === "verified" ? now : undefined,
-      rejectionReason: args.status === "rejected" ? args.rejectionReason : undefined,
-      createdAt: now,
-      updatedAt: now,
-    });
-    return;
-  }
-
-  await ctx.db.patch(existing._id, {
-    identityStatus,
-    driverLicenseStatus,
-    identitySessionId,
-    driverLicenseSessionId,
-    identityVerifiedAt:
-      args.checkType === "identity"
-        ? args.status === "verified"
-          ? now
-          : undefined
-        : existing.identityVerifiedAt,
-    driverLicenseVerifiedAt:
-      args.checkType === "driver_license"
-        ? args.status === "verified"
-          ? now
-          : undefined
-        : existing.driverLicenseVerifiedAt,
-    rejectionReason: args.status === "rejected" ? args.rejectionReason : undefined,
-    updatedAt: now,
-  });
-}
-
 async function getRenterVerificationSummaryForClerk(ctx: any, clerkUserId: string) {
   const enabled = isRenterVerificationEnabled();
-  console.debug("[verification] renter flag evaluated", {
-    clerkUserId,
-    enabled,
-    rawValue: process.env.ENABLE_RENTER_VERIFICATION,
-  });
-
   const user = await ctx.db
     .query("users")
     .withIndex("by_clerk_id", (q: any) => q.eq("clerkUserId", clerkUserId))
@@ -210,7 +126,6 @@ async function getRenterVerificationSummaryForClerk(ctx: any, clerkUserId: strin
     const eligibility = evaluateRenterBookingEligibility(checks);
     return {
       enabled,
-      identityStatus: checks.identity,
       driverLicenseStatus: checks.driver_license,
       readyToBook: enabled ? eligibility.readyToBook : true,
       reasonCode: enabled ? eligibility.reasonCode : undefined,
@@ -224,7 +139,6 @@ async function getRenterVerificationSummaryForClerk(ctx: any, clerkUserId: strin
 
   return {
     enabled,
-    identityStatus: checks.identity,
     driverLicenseStatus: checks.driver_license,
     readyToBook: enabled ? eligibility.readyToBook : true,
     reasonCode: enabled ? eligibility.reasonCode : undefined,
@@ -233,9 +147,16 @@ async function getRenterVerificationSummaryForClerk(ctx: any, clerkUserId: strin
   };
 }
 
-async function startRenterCheck(ctx: any, checkType: VerificationCheckType, returnUrl?: string) {
+async function startRenterDriverLicenseSession(
+  ctx: any,
+  provider: VerificationProvider,
+  returnUrl?: string,
+) {
   if (!isRenterVerificationEnabled()) {
     throw new Error("UNAVAILABLE: Renter verification is disabled.");
+  }
+  if (provider === "mobywatel") {
+    throw new Error("UNAVAILABLE: mObywatel verification will be implemented soon.");
   }
 
   const user = await ctx.runMutation(unsafeInternal.verification.ensureUserForVerificationInternal, {});
@@ -244,7 +165,7 @@ async function startRenterCheck(ctx: any, checkType: VerificationCheckType, retu
     const existing = await ctx.db
       .query("verification_checks")
       .withIndex("by_user_subject_check", (q: any) =>
-        q.eq("userId", user._id).eq("subjectType", "renter").eq("checkType", checkType),
+        q.eq("userId", user._id).eq("subjectType", "renter").eq("checkType", "driver_license"),
       )
       .first();
     if (existing?.status === "verified" && typeof existing.verifiedAt === "number") {
@@ -252,32 +173,31 @@ async function startRenterCheck(ctx: any, checkType: VerificationCheckType, retu
       const cooldownMs = recertDays * 24 * 60 * 60 * 1000;
       if (ageMs < cooldownMs) {
         return {
-          sessionId:
-            existing.providerSessionId ?? `${existing.provider}-${String(existing._id)}-verified`,
+          sessionId: existing.providerSessionId ?? `${existing.provider}-${String(existing._id)}-verified`,
           status: "verified",
-          url: getIdentityReturnUrl(returnUrl),
+          url: getVerificationReturnUrl(returnUrl),
         };
       }
     }
   }
 
-  const providerKey = getDefaultVerificationProvider();
-  const providerClient = getVerificationProvider(providerKey);
+  const providerClient = getVerificationProvider(provider);
   const session = await providerClient.createSession({
-    checkType,
+    checkType: "driver_license",
     subjectType: "renter",
     userId: String(user._id),
-    returnUrl: getIdentityReturnUrl(returnUrl),
+    returnUrl: getVerificationReturnUrl(returnUrl),
     metadata: {
-      verificationType: checkType,
+      verificationType: "driver_license",
+      checkType: "driver_license",
     },
   });
 
   await ctx.runMutation(unsafeInternal.verification.upsertCheckSessionInternal, {
     userId: user._id,
     subjectType: "renter",
-    checkType,
-    provider: providerKey,
+    checkType: "driver_license",
+    provider,
     providerSessionId: session.sessionId,
   });
 
@@ -286,13 +206,13 @@ async function startRenterCheck(ctx: any, checkType: VerificationCheckType, retu
 
 const stripeVerificationSessionCache = new ActionCache(components.actionCache, {
   action: unsafeInternal.verification.fetchStripeVerificationSessionUncached,
-  name: "stripe-verification-session-v1",
+  name: "stripe-verification-session-v2",
   ttl: 60 * 1000,
 });
 
-const polandLocalVerificationSessionCache = new ActionCache(components.actionCache, {
-  action: unsafeInternal.verification.fetchPolandLocalVerificationSessionUncached,
-  name: "poland-local-verification-session-v1",
+const mobywatelVerificationSessionCache = new ActionCache(components.actionCache, {
+  action: unsafeInternal.verification.fetchMobywatelVerificationSessionUncached,
+  name: "mobywatel-verification-session-v1",
   ttl: 60 * 1000,
 });
 
@@ -350,12 +270,12 @@ export const fetchStripeVerificationSessionUncached = internalAction({
   },
 });
 
-export const fetchPolandLocalVerificationSessionUncached = internalAction({
+export const fetchMobywatelVerificationSessionUncached = internalAction({
   args: {
     sessionId: v.string(),
   },
   async handler(_, args): Promise<any> {
-    return await getVerificationProvider("poland_local").fetchSession(args.sessionId);
+    return await getVerificationProvider("mobywatel").fetchSession(args.sessionId);
   },
 });
 
@@ -371,30 +291,17 @@ export const findRenterCheckBySessionInternal = internalQuery({
       .query("verification_checks")
       .withIndex("by_provider_session", (q: any) => q.eq("providerSessionId", args.sessionId))
       .collect();
-    const renterCheck = checks.find((check: any) => check.subjectType === "renter");
-    if (renterCheck) {
-      return {
-        checkType: renterCheck.checkType as VerificationCheckType,
-        provider: renterCheck.provider as VerificationProvider,
-      };
+    const renterCheck = checks.find(
+      (check: any) => check.subjectType === "renter" && check.checkType === "driver_license",
+    );
+    if (!renterCheck) {
+      return null;
     }
 
-    const legacyIdentity = await ctx.db
-      .query("renter_verifications")
-      .withIndex("by_identity_session", (q: any) => q.eq("identitySessionId", args.sessionId))
-      .first();
-    if (legacyIdentity) {
-      return { checkType: "identity", provider: "stripe" };
-    }
-    const legacyLicense = await ctx.db
-      .query("renter_verifications")
-      .withIndex("by_driver_session", (q: any) => q.eq("driverLicenseSessionId", args.sessionId))
-      .first();
-    if (legacyLicense) {
-      return { checkType: "driver_license", provider: "stripe" };
-    }
-
-    return null;
+    return {
+      checkType: "driver_license",
+      provider: renterCheck.provider as VerificationProvider,
+    };
   },
 });
 
@@ -409,28 +316,18 @@ export const getLatestRenterSessionIdForClerkInternal = internalQuery({
       .first();
     if (!user) return null;
 
-    const checks = await ctx.db
+    const rows = await ctx.db
       .query("verification_checks")
-      .withIndex("by_user_subject", (q: any) => q.eq("userId", user._id).eq("subjectType", "renter"))
+      .withIndex("by_user_subject_check", (q: any) =>
+        q.eq("userId", user._id).eq("subjectType", "renter").eq("checkType", "driver_license"),
+      )
       .collect();
-    const sorted = checks
-      .filter((check: any) => Boolean(check.providerSessionId))
-      .sort((a: any, b: any) => (b.updatedAt ?? b._creationTime) - (a.updatedAt ?? a._creationTime));
-    if (sorted.length > 0) {
-      return { sessionId: sorted[0].providerSessionId as string, checkType: sorted[0].checkType };
-    }
 
-    const legacy = await ctx.db
-      .query("renter_verifications")
-      .withIndex("by_user", (q: any) => q.eq("userId", user._id))
-      .first();
-    if (legacy?.driverLicenseSessionId) {
-      return { sessionId: legacy.driverLicenseSessionId, checkType: "driver_license" };
-    }
-    if (legacy?.identitySessionId) {
-      return { sessionId: legacy.identitySessionId, checkType: "identity" };
-    }
-    return null;
+    const latest = rows
+      .filter((row: any) => Boolean(row.providerSessionId))
+      .sort((a: any, b: any) => (b.updatedAt ?? b._creationTime) - (a.updatedAt ?? a._creationTime))[0];
+    if (!latest?.providerSessionId) return null;
+    return { sessionId: latest.providerSessionId as string, checkType: "driver_license" };
   },
 });
 
@@ -462,61 +359,47 @@ export const syncRenterVerificationSession = action({
 
     const provider = (fallback?.provider ?? "stripe") as VerificationProvider;
     const session =
-      provider === "poland_local"
-        ? await polandLocalVerificationSessionCache.fetch(ctx, { sessionId: resolved })
+      provider === "mobywatel"
+        ? await mobywatelVerificationSessionCache.fetch(ctx, { sessionId: resolved })
         : await stripeVerificationSessionCache.fetch(ctx, { sessionId: resolved });
-
-    const checkType = (session?.checkType ?? fallback?.checkType ?? "driver_license") as VerificationCheckType;
 
     await ctx.runMutation(unsafeInternal.verification.updateCheckFromProviderSessionInternal, {
       providerSessionId: resolved,
       subjectType: "renter",
-      checkType,
+      checkType: "driver_license",
       provider,
       status: toInternalVerificationStatus(String(session.status)),
-      rejectionReason:
-        typeof session?.rejectionReason === "string" ? session.rejectionReason : undefined,
+      rejectionReason: typeof session?.rejectionReason === "string" ? session.rejectionReason : undefined,
     });
 
     return {
       sessionId: resolved,
       provider,
       providerStatus: session.status,
-      checkType,
+      checkType: "driver_license",
       updated: true,
     };
-  },
-});
-
-export const startRenterIdentityCheck = action({
-  args: {
-    returnUrl: v.optional(v.string()),
-  },
-  async handler(ctx, args) {
-    return await startRenterCheck(ctx, "identity", args.returnUrl);
   },
 });
 
 export const startRenterDriverLicenseCheck = action({
   args: {
     returnUrl: v.optional(v.string()),
+    provider: v.optional(v.union(v.literal("stripe"), v.literal("mobywatel"))),
   },
   async handler(ctx, args) {
-    return await startRenterCheck(ctx, "driver_license", args.returnUrl);
-  },
-});
-
-export const startRenterIdentityCheckInternal = internalAction({
-  args: {},
-  async handler(ctx) {
-    return await startRenterCheck(ctx, "identity");
+    const provider = args.provider ?? getDefaultVerificationProvider();
+    return await startRenterDriverLicenseSession(ctx, provider, args.returnUrl);
   },
 });
 
 export const startRenterDriverLicenseCheckInternal = internalAction({
-  args: {},
-  async handler(ctx) {
-    return await startRenterCheck(ctx, "driver_license");
+  args: {
+    provider: v.optional(v.union(v.literal("stripe"), v.literal("mobywatel"))),
+  },
+  async handler(ctx, args) {
+    const provider = args.provider ?? getDefaultVerificationProvider();
+    return await startRenterDriverLicenseSession(ctx, provider);
   },
 });
 
@@ -524,8 +407,8 @@ export const upsertCheckSessionInternal = internalMutation({
   args: {
     userId: v.id("users"),
     subjectType: v.union(v.literal("renter")),
-    checkType: v.union(v.literal("identity"), v.literal("driver_license")),
-    provider: v.union(v.literal("stripe"), v.literal("poland_local")),
+    checkType: v.union(v.literal("driver_license")),
+    provider: v.union(v.literal("stripe"), v.literal("mobywatel")),
     providerSessionId: v.string(),
   },
   async handler(ctx, args) {
@@ -539,16 +422,6 @@ export const upsertCheckSessionInternal = internalMutation({
       rejectionReason: undefined,
       verifiedAt: undefined,
     });
-
-    if (args.subjectType === "renter") {
-      await syncLegacyRow(ctx, {
-        userId: args.userId,
-        checkType: args.checkType,
-        status: "pending",
-        sessionId: args.providerSessionId,
-        rejectionReason: undefined,
-      });
-    }
   },
 });
 
@@ -556,8 +429,8 @@ export const updateCheckFromProviderSessionInternal = internalMutation({
   args: {
     providerSessionId: v.string(),
     subjectType: v.union(v.literal("renter")),
-    checkType: v.union(v.literal("identity"), v.literal("driver_license")),
-    provider: v.union(v.literal("stripe"), v.literal("poland_local")),
+    checkType: v.union(v.literal("driver_license")),
+    provider: v.union(v.literal("stripe"), v.literal("mobywatel")),
     status: v.union(v.literal("pending"), v.literal("verified"), v.literal("rejected")),
     rejectionReason: v.optional(v.string()),
   },
@@ -567,41 +440,10 @@ export const updateCheckFromProviderSessionInternal = internalMutation({
       .withIndex("by_provider_session", (q: any) => q.eq("providerSessionId", args.providerSessionId))
       .collect();
 
-    let target =
+    const target =
       bySession.find(
         (row: any) => row.subjectType === args.subjectType && row.checkType === args.checkType,
       ) ?? null;
-
-    if (!target && args.subjectType === "renter") {
-      const legacy = await ctx.db
-        .query("renter_verifications")
-        .withIndex(args.checkType === "identity" ? "by_identity_session" : "by_driver_session", (q: any) =>
-          q.eq(args.checkType === "identity" ? "identitySessionId" : "driverLicenseSessionId", args.providerSessionId),
-        )
-        .first();
-
-      if (!legacy) {
-        return { updated: false };
-      }
-
-      await upsertGenericCheck(ctx, {
-        userId: legacy.userId,
-        subjectType: args.subjectType,
-        checkType: args.checkType,
-        status: args.status,
-        provider: args.provider,
-        providerSessionId: args.providerSessionId,
-        rejectionReason: args.status === "rejected" ? args.rejectionReason : undefined,
-        verifiedAt: args.status === "verified" ? Date.now() : undefined,
-      });
-
-      target = await ctx.db
-        .query("verification_checks")
-        .withIndex("by_user_subject_check", (q: any) =>
-          q.eq("userId", legacy.userId).eq("subjectType", args.subjectType).eq("checkType", args.checkType),
-        )
-        .first();
-    }
 
     if (!target) {
       return { updated: false };
@@ -616,58 +458,48 @@ export const updateCheckFromProviderSessionInternal = internalMutation({
       updatedAt: now,
     });
 
-    if (args.subjectType === "renter") {
-      await syncLegacyRow(ctx, {
-        userId: target.userId,
-        checkType: args.checkType,
-        status: args.status,
-        sessionId: args.providerSessionId,
-        rejectionReason: args.rejectionReason,
-      });
-    }
-
     return { updated: true };
   },
 });
 
-export const backfillRenterVerificationsToChecksInternal = internalMutation({
+export const importLegacyDriverLicenseChecksInternal = internalMutation({
   args: {
-    limit: v.optional(v.number()),
+    rows: v.array(
+      v.object({
+        clerkUserId: v.string(),
+        status: v.union(v.literal("unverified"), v.literal("pending"), v.literal("verified"), v.literal("rejected")),
+        providerSessionId: v.optional(v.string()),
+        verifiedAt: v.optional(v.number()),
+        rejectionReason: v.optional(v.string()),
+      }),
+    ),
   },
   async handler(ctx, args) {
-    const rows = await ctx.db.query("renter_verifications").collect();
-    const max = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : rows.length;
-    let migrated = 0;
+    let imported = 0;
+    let skipped = 0;
 
-    for (const row of rows.slice(0, max)) {
+    for (const row of args.rows) {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("by_clerk_id", (q: any) => q.eq("clerkUserId", row.clerkUserId))
+        .first();
+      if (!user) {
+        skipped += 1;
+        continue;
+      }
       await upsertGenericCheck(ctx, {
-        userId: row.userId,
-        subjectType: "renter",
-        checkType: "identity",
-        status: row.identityStatus,
-        provider: "stripe",
-        providerSessionId: row.identitySessionId,
-        rejectionReason: row.identityStatus === "rejected" ? row.rejectionReason : undefined,
-        verifiedAt: row.identityVerifiedAt,
-      });
-      await upsertGenericCheck(ctx, {
-        userId: row.userId,
+        userId: user._id,
         subjectType: "renter",
         checkType: "driver_license",
-        status: row.driverLicenseStatus,
+        status: row.status,
         provider: "stripe",
-        providerSessionId: row.driverLicenseSessionId,
-        rejectionReason: row.driverLicenseStatus === "rejected" ? row.rejectionReason : undefined,
-        verifiedAt: row.driverLicenseVerifiedAt,
+        providerSessionId: row.providerSessionId,
+        verifiedAt: row.verifiedAt,
+        rejectionReason: row.status === "rejected" ? row.rejectionReason : undefined,
       });
-      migrated += 1;
+      imported += 1;
     }
 
-    return {
-      migrated,
-      scanned: rows.length,
-      remaining: Math.max(0, rows.length - migrated),
-    };
+    return { imported, skipped };
   },
 });
-

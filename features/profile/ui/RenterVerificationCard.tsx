@@ -12,9 +12,7 @@ export function RenterVerificationCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const renterVerification = useQuery(profileApi.getMyRenterVerificationStatus);
-  const startRenterIdentityCheck = useAction(profileApi.startRenterIdentityCheck);
   const startRenterDriverLicenseCheck = useAction(profileApi.startRenterDriverLicenseCheck);
-  const [isStartingIdentityVerification, setIsStartingIdentityVerification] = useState(false);
   const [isStartingLicenseVerification, setIsStartingLicenseVerification] = useState(false);
 
   const openExternalUrl = async (url: string) => {
@@ -25,22 +23,12 @@ export function RenterVerificationCard() {
     await ExpoLinking.openURL(url);
   };
 
-  const handleStartIdentityVerification = async () => {
-    setIsStartingIdentityVerification(true);
-    try {
-      const result = (await startRenterIdentityCheck({})) as { url: string };
-      await openExternalUrl(result.url);
-    } catch (error) {
-      toast.error(toLocalizedErrorMessage(error, t));
-    } finally {
-      setIsStartingIdentityVerification(false);
-    }
-  };
-
-  const handleStartLicenseVerification = async () => {
+  const handleStartStripeVerification = async () => {
     setIsStartingLicenseVerification(true);
     try {
-      const result = (await startRenterDriverLicenseCheck({})) as { url: string };
+      const result = (await startRenterDriverLicenseCheck({
+        provider: "stripe",
+      })) as { url: string };
       await openExternalUrl(result.url);
     } catch (error) {
       toast.error(toLocalizedErrorMessage(error, t));
@@ -50,7 +38,6 @@ export function RenterVerificationCard() {
   };
 
   const verificationEnabled = renterVerification?.enabled ?? false;
-  const identityStatus = renterVerification?.identityStatus ?? "unverified";
   const driverLicenseStatus = renterVerification?.driverLicenseStatus ?? "unverified";
   const readyToBook = renterVerification?.readyToBook ?? false;
   const renterVerified = verificationEnabled && readyToBook;
@@ -75,45 +62,15 @@ export function RenterVerificationCard() {
         </>
       )}
 
-      <View className="mb-3 rounded-lg border border-border p-3 bg-secondary/20">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-sm font-semibold text-muted-foreground">
-            {t("profile.verification.identityOptional")}
-          </Text>
-          <View className={`rounded-full px-2 py-1 ${verificationBadge(identityStatus)}`}>
-            <Text className="text-xs font-semibold">
-              {t(`profile.verification.status.${identityStatus}`)}
-            </Text>
-          </View>
-        </View>
-        <Pressable
-          onPress={handleStartIdentityVerification}
-          disabled={!verificationEnabled || isStartingIdentityVerification || identityStatus === "verified"}
-          className={`mt-2 rounded-lg py-2 items-center ${
-            !verificationEnabled || isStartingIdentityVerification || identityStatus === "verified"
-              ? "bg-primary/60"
-              : "bg-primary"
-          }`}
-        >
-          <Text className="text-sm font-semibold text-primary-foreground">
-            {identityStatus === "verified"
-              ? t("profile.verification.verified")
-              : t("profile.verification.start")}
-          </Text>
-        </Pressable>
-      </View>
-
       <View className="rounded-lg border border-border p-3">
         <View className="flex-row items-center justify-between">
           <Text className="text-sm font-semibold text-foreground">{t("profile.verification.driverLicense")}</Text>
           <View className={`rounded-full px-2 py-1 ${verificationBadge(driverLicenseStatus)}`}>
-            <Text className="text-xs font-semibold">
-              {t(`profile.verification.status.${driverLicenseStatus}`)}
-            </Text>
+            <Text className="text-xs font-semibold">{t(`profile.verification.status.${driverLicenseStatus}`)}</Text>
           </View>
         </View>
         <Pressable
-          onPress={handleStartLicenseVerification}
+          onPress={handleStartStripeVerification}
           disabled={!verificationEnabled || isStartingLicenseVerification || driverLicenseStatus === "verified"}
           className={`mt-2 rounded-lg py-2 items-center ${
             !verificationEnabled || isStartingLicenseVerification || driverLicenseStatus === "verified"
@@ -124,9 +81,14 @@ export function RenterVerificationCard() {
           <Text className="text-sm font-semibold text-primary-foreground">
             {driverLicenseStatus === "verified"
               ? t("profile.verification.verified")
-              : t("profile.verification.start")}
+              : t("profile.verification.startStripe")}
           </Text>
         </Pressable>
+
+        <View className="mt-2 rounded-lg border border-border bg-secondary/20 px-3 py-2">
+          <Text className="text-sm font-semibold text-muted-foreground">{t("profile.verification.startMobywatel")}</Text>
+          <Text className="mt-1 text-xs text-muted-foreground">{t("profile.verification.mobywatelComingSoon")}</Text>
+        </View>
       </View>
     </View>
   );

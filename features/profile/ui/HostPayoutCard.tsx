@@ -52,16 +52,35 @@ export function HostPayoutCard({ connect }: HostPayoutCardProps) {
   const hostVerificationLabel = hostPayoutStatus?.hostVerified
     ? t("profile.verification.status.verified")
     : t("profile.verification.status.unverified");
+  const verificationStateDescription = hostPayoutStatus
+    ? t(`profile.payouts.verificationState.${hostPayoutStatus.verificationState}`)
+    : "";
+  const requiredActions = Array.isArray(hostPayoutStatus?.requiredActions)
+    ? hostPayoutStatus.requiredActions
+    : [];
+  const shouldShowManagePayouts = Boolean(hostPayoutStatus?.verificationState === "verified_ready");
+  const shouldShowIdentityVerification = Boolean(hostPayoutStatus?.identityDocumentRequired);
+  const showRequiredActions = requiredActions.length > 0;
+
+  const formatRequiredAction = (value: string) =>
+    value
+      .replace(/\./g, " -> ")
+      .replace(/_/g, " ");
 
   const handleOpenPayoutSetup = async () => {
     setIsOpeningPayoutSetup(true);
     try {
-      const result = (await createHostOnboardingLink({})) as { url: string };
+      const refreshed = (await refreshHostConnectStatus({})) as { verificationUrl?: string | null };
+      const result = refreshed?.verificationUrl
+        ? { url: refreshed.verificationUrl }
+        : ((await createHostOnboardingLink({})) as { url: string });
       if (typeof window !== "undefined") {
         window.location.href = result.url;
       } else {
         await ExpoLinking.openURL(result.url);
       }
+    } catch (error) {
+      toast.error(toLocalizedErrorMessage(error, t, "apiErrors.default"));
     } finally {
       setIsOpeningPayoutSetup(false);
     }
@@ -79,6 +98,46 @@ export function HostPayoutCard({ connect }: HostPayoutCardProps) {
       <Text className="text-sm text-muted-foreground mb-3">
         {t("profile.payouts.statusLabel", { status: payoutStatusLabel })}
       </Text>
+      {hostPayoutStatus ? (
+        <View className="mb-3 rounded-lg border border-border px-3 py-2">
+          <Text className="text-xs text-muted-foreground mb-2">{verificationStateDescription}</Text>
+          {hostPayoutStatus.disabledReason ? (
+            <Text className="mb-2 text-xs text-amber-700">
+              {t("profile.payouts.disabledReason", { reason: hostPayoutStatus.disabledReason })}
+            </Text>
+          ) : null}
+          {showRequiredActions ? (
+            <View className="mb-2 rounded-md border border-border bg-secondary/20 px-2 py-2">
+              <Text className="text-xs font-semibold text-foreground mb-1">
+                {t("profile.payouts.requiredActionsTitle")}
+              </Text>
+              {requiredActions.slice(0, 5).map((action) => (
+                <Text key={action} className="text-xs text-muted-foreground">
+                  {`\u2022 ${formatRequiredAction(action)}`}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+          <View className="flex-row items-center justify-between py-1">
+            <Text className="text-sm text-foreground">{t("profile.payouts.capabilities.onboarding")}</Text>
+            <Text className={`text-xs font-semibold ${hostPayoutStatus.onboardingComplete ? "text-green-700" : "text-amber-700"}`}>
+              {hostPayoutStatus.onboardingComplete ? t("profile.payouts.capability.enabled") : t("profile.payouts.capability.disabled")}
+            </Text>
+          </View>
+          <View className="flex-row items-center justify-between py-1">
+            <Text className="text-sm text-foreground">{t("profile.payouts.capabilities.charges")}</Text>
+            <Text className={`text-xs font-semibold ${hostPayoutStatus.chargesEnabled ? "text-green-700" : "text-amber-700"}`}>
+              {hostPayoutStatus.chargesEnabled ? t("profile.payouts.capability.enabled") : t("profile.payouts.capability.disabled")}
+            </Text>
+          </View>
+          <View className="flex-row items-center justify-between py-1">
+            <Text className="text-sm text-foreground">{t("profile.payouts.capabilities.payouts")}</Text>
+            <Text className={`text-xs font-semibold ${hostPayoutStatus.payoutsEnabled ? "text-green-700" : "text-amber-700"}`}>
+              {hostPayoutStatus.payoutsEnabled ? t("profile.payouts.capability.enabled") : t("profile.payouts.capability.disabled")}
+            </Text>
+          </View>
+        </View>
+      ) : null}
       {isRefreshingPayoutStatus ? (
         <Text className="text-xs text-muted-foreground mb-2">{t("common.loading")}</Text>
       ) : null}
@@ -88,7 +147,13 @@ export function HostPayoutCard({ connect }: HostPayoutCardProps) {
         className={`rounded-lg px-3 py-3 items-center ${isOpeningPayoutSetup ? "bg-primary/70" : "bg-primary"}`}
       >
         <Text className="text-primary-foreground font-semibold">
-          {isOpeningPayoutSetup ? t("profile.payouts.opening") : t("common.actions.setUpPayouts")}
+          {isOpeningPayoutSetup
+            ? t("profile.payouts.opening")
+            : shouldShowManagePayouts
+              ? t("profile.payouts.manageCompanyDetails")
+              : shouldShowIdentityVerification
+                ? t("profile.payouts.verifyIdentityDocument")
+                : t("profile.payouts.resolveRequiredActions")}
         </Text>
       </Pressable>
     </View>

@@ -7,10 +7,109 @@ import { assertAllowedRedirectUrl } from "../../../guards/redirectUrlGuard";
 
 type StripeAccountResponse = {
   id: string;
+  type?: string;
+  controller?: {
+    stripe_dashboard?: {
+      type?: string;
+    };
+  };
   details_submitted?: boolean;
   charges_enabled?: boolean;
   payouts_enabled?: boolean;
+  requirements?: {
+    currently_due?: string[];
+    past_due?: string[];
+    eventually_due?: string[];
+    pending_verification?: string[];
+    disabled_reason?: string | null;
+  };
+  future_requirements?: {
+    currently_due?: string[];
+    past_due?: string[];
+    eventually_due?: string[];
+    pending_verification?: string[];
+    disabled_reason?: string | null;
+  };
 };
+
+function normalizeRequirements(requirements: StripeAccountResponse["requirements"]) {
+  return {
+    currentlyDue: Array.isArray(requirements?.currently_due) ? requirements.currently_due : [],
+    pastDue: Array.isArray(requirements?.past_due) ? requirements.past_due : [],
+    eventuallyDue: Array.isArray(requirements?.eventually_due) ? requirements.eventually_due : [],
+    pendingVerification: Array.isArray(requirements?.pending_verification)
+      ? requirements.pending_verification
+      : [],
+    disabledReason:
+      typeof requirements?.disabled_reason === "string" && requirements.disabled_reason.trim().length > 0
+        ? requirements.disabled_reason
+        : null,
+  };
+}
+
+function collectRequiredActions(account: StripeAccountResponse) {
+  const req = normalizeRequirements(account.requirements);
+  const futureReq = normalizeRequirements(account.future_requirements);
+  return [
+    ...new Set([
+      ...req.currentlyDue,
+      ...req.pastDue,
+      ...req.pendingVerification,
+      ...futureReq.currentlyDue,
+      ...futureReq.pastDue,
+      ...futureReq.pendingVerification,
+      ...req.eventuallyDue,
+      ...futureReq.eventuallyDue,
+    ]),
+  ];
+}
+
+function resolvePreferredConnectLinkType(account: StripeAccountResponse) {
+  const dashboardType = account.controller?.stripe_dashboard?.type;
+  const accountType = account.type;
+  const hasStripeHostedDashboard = dashboardType === "express" || dashboardType === "full" || accountType === "express" || accountType === "standard";
+  if (hasStripeHostedDashboard) {
+    return "account_onboarding";
+  }
+  return account.details_submitted ? "account_update" : "account_onboarding";
+}
+
+function resolveConnectRedirectUrls(args?: { returnUrl?: string; refreshUrl?: string }) {
+  const refreshUrl = assertAllowedRedirectUrl(
+    args?.refreshUrl?.trim() ||
+      process.env.STRIPE_CONNECT_REFRESH_URL ||
+      "http://localhost:8081/profile/payments?connect=refresh",
+    "refreshUrl",
+  );
+  const returnUrl = assertAllowedRedirectUrl(
+    args?.returnUrl?.trim() ||
+      process.env.STRIPE_CONNECT_RETURN_URL ||
+      "http://localhost:8081/profile/payments?connect=return",
+    "returnUrl",
+  );
+  return { refreshUrl, returnUrl };
+}
+
+async function createConnectAccountLink(args: {
+  stripeConnectAccountId: string;
+  account: StripeAccountResponse;
+  returnUrl: string;
+  refreshUrl: string;
+}) {
+  const linkType = resolvePreferredConnectLinkType(args.account);
+  const body = new URLSearchParams({
+    account: args.stripeConnectAccountId,
+    type: linkType,
+    refresh_url: args.refreshUrl,
+    return_url: args.returnUrl,
+  });
+  if (linkType === "account_onboarding") {
+    body.set("collection_options[fields]", "eventually_due");
+    body.set("collection_options[future_requirements]", "include");
+  }
+  const accountLink = await stripeFormRequest("account_links", body);
+  return { url: accountLink.url as string, linkType };
+}
 
 function getStripeSecretKey() {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -60,6 +159,21 @@ const stripeAccountCache = new ActionCache(components.actionCache, {
 });
 
 const unsafeInternal = internal as any;
+const CONNECT_STATUS_RECHECK_DELAYS_MS = [2 * 60 * 1000, 10 * 60 * 1000, 30 * 60 * 1000] as const;
+
+async function scheduleHostConnectStatusRechecks(
+  ctx: any,
+  args: { hostId: any; stripeConnectAccountId: string },
+) {
+  await Promise.all(
+    CONNECT_STATUS_RECHECK_DELAYS_MS.map((delayMs) =>
+      ctx.scheduler.runAfter(delayMs, unsafeInternal.stripeConnect.refreshHostConnectStatusScheduledInternal, {
+        hostId: args.hostId,
+        stripeConnectAccountId: args.stripeConnectAccountId,
+      }),
+    ),
+  );
+}
 
 async function ensureHostConnectAccount(
   ctx: any,
@@ -85,6 +199,11 @@ async function ensureHostConnectAccount(
     stripeOnboardingComplete: Boolean(account.details_submitted),
     stripeChargesEnabled: Boolean(account.charges_enabled),
     stripePayoutsEnabled: Boolean(account.payouts_enabled),
+    stripeRequirementsCurrentlyDue: normalizeRequirements(account.requirements).currentlyDue,
+    stripeRequirementsPastDue: normalizeRequirements(account.requirements).pastDue,
+    stripeRequirementsEventuallyDue: normalizeRequirements(account.requirements).eventuallyDue,
+    stripeRequirementsPendingVerification: normalizeRequirements(account.requirements).pendingVerification,
+    stripeRequirementsDisabledReason: normalizeRequirements(account.requirements).disabledReason,
   });
 
   return { host, stripeConnectAccountId: account.id };
@@ -98,6 +217,10 @@ export const createOrGetHostConnectAccount = action({
       hostId: host._id,
       stripeConnectAccountId,
     });
+    await scheduleHostConnectStatusRechecks(ctx, {
+      hostId: host._id,
+      stripeConnectAccountId,
+    });
     return { stripeConnectAccountId };
   },
 });
@@ -108,42 +231,42 @@ export const createHostOnboardingLink = action({
     refreshUrl: v.optional(v.string()),
   },
   async handler(ctx, args) {
-    const { stripeConnectAccountId } = await ensureHostConnectAccount(ctx);
+    const { host, stripeConnectAccountId } = await ensureHostConnectAccount(ctx);
+    const { refreshUrl, returnUrl } = resolveConnectRedirectUrls(args);
 
-    const refreshUrl = assertAllowedRedirectUrl(
-      args.refreshUrl?.trim() ||
-        process.env.STRIPE_CONNECT_REFRESH_URL ||
-        "http://localhost:8081/profile/payments?connect=refresh",
-      "refreshUrl",
-    );
-    const returnUrl = assertAllowedRedirectUrl(
-      args.returnUrl?.trim() ||
-        process.env.STRIPE_CONNECT_RETURN_URL ||
-        "http://localhost:8081/profile/payments?connect=return",
-      "returnUrl",
-    );
+    const latestAccount = (await ctx.runAction(unsafeInternal.stripeConnect.getStripeAccountUncached, {
+      stripeConnectAccountId,
+    })) as StripeAccountResponse;
+    const accountLink = await createConnectAccountLink({
+      stripeConnectAccountId,
+      account: latestAccount,
+      refreshUrl,
+      returnUrl,
+    });
 
-    const accountLink = await stripeFormRequest(
-      "account_links",
-      new URLSearchParams({
-        account: stripeConnectAccountId,
-        type: "account_onboarding",
-        refresh_url: refreshUrl,
-        return_url: returnUrl,
-      }),
-    );
+    await scheduleHostConnectStatusRechecks(ctx, {
+      hostId: host._id,
+      stripeConnectAccountId,
+    });
 
-    return { url: accountLink.url as string };
+    return accountLink;
   },
 });
 
 export const refreshHostConnectStatus = action({
-  args: {},
-  async handler(ctx): Promise<{
+  args: {
+    returnUrl: v.optional(v.string()),
+    refreshUrl: v.optional(v.string()),
+  },
+  async handler(ctx, args): Promise<{
     hasConnectAccount: boolean;
     onboardingComplete: boolean;
     chargesEnabled: boolean;
     payoutsEnabled: boolean;
+    requiredActions: string[];
+    disabledReason: string | null;
+    preferredLinkType: "account_onboarding" | "account_update";
+    verificationUrl: string | null;
     stripeConnectAccountId?: string;
   }> {
     const host = await ctx.runMutation(unsafeInternal.stripeConnect.ensureHostInternal, {});
@@ -153,12 +276,17 @@ export const refreshHostConnectStatus = action({
         onboardingComplete: false,
         chargesEnabled: false,
         payoutsEnabled: false,
+        requiredActions: [],
+        disabledReason: null,
+        preferredLinkType: "account_onboarding",
+        verificationUrl: null,
       };
     }
-
     return await ctx.runAction(unsafeInternal.stripeConnect.refreshHostConnectStatusInternal, {
       hostId: host._id,
       stripeConnectAccountId: host.stripeConnectAccountId,
+      returnUrl: args.returnUrl,
+      refreshUrl: args.refreshUrl,
     });
   },
 });
@@ -174,15 +302,30 @@ export const refreshHostConnectStatusInternal = internalAction({
   args: {
     hostId: v.id("hosts"),
     stripeConnectAccountId: v.string(),
+    returnUrl: v.optional(v.string()),
+    refreshUrl: v.optional(v.string()),
   },
   async handler(ctx, args) {
-    const account = (await stripeAccountCache.fetch(ctx, {
+    const account = (await ctx.runAction(unsafeInternal.stripeConnect.getStripeAccountUncached, {
       stripeConnectAccountId: args.stripeConnectAccountId,
     })) as StripeAccountResponse;
 
     const onboardingComplete = Boolean(account.details_submitted);
     const chargesEnabled = Boolean(account.charges_enabled);
     const payoutsEnabled = Boolean(account.payouts_enabled);
+    const requirements = normalizeRequirements(account.requirements);
+    const requiredActions = collectRequiredActions(account);
+    const preferredLinkType = resolvePreferredConnectLinkType(account);
+    const { refreshUrl, returnUrl } = resolveConnectRedirectUrls({
+      returnUrl: args.returnUrl,
+      refreshUrl: args.refreshUrl,
+    });
+    const verificationLink = await createConnectAccountLink({
+      stripeConnectAccountId: args.stripeConnectAccountId,
+      account,
+      refreshUrl,
+      returnUrl,
+    });
 
     await ctx.runMutation(unsafeInternal.stripe.updateHostStripeStatusInternal, {
       hostId: args.hostId,
@@ -190,6 +333,11 @@ export const refreshHostConnectStatusInternal = internalAction({
       stripeOnboardingComplete: onboardingComplete,
       stripeChargesEnabled: chargesEnabled,
       stripePayoutsEnabled: payoutsEnabled,
+      stripeRequirementsCurrentlyDue: requirements.currentlyDue,
+      stripeRequirementsPastDue: requirements.pastDue,
+      stripeRequirementsEventuallyDue: requirements.eventuallyDue,
+      stripeRequirementsPendingVerification: requirements.pendingVerification,
+      stripeRequirementsDisabledReason: requirements.disabledReason,
     });
 
     if (payoutsEnabled) {
@@ -204,8 +352,44 @@ export const refreshHostConnectStatusInternal = internalAction({
       onboardingComplete,
       chargesEnabled,
       payoutsEnabled,
+      requiredActions,
+      disabledReason: requirements.disabledReason,
+      preferredLinkType,
+      verificationUrl: verificationLink.url,
       stripeConnectAccountId: args.stripeConnectAccountId,
     };
+  },
+});
+
+export const refreshHostConnectStatusScheduledInternal = internalAction({
+  args: {
+    hostId: v.id("hosts"),
+    stripeConnectAccountId: v.string(),
+  },
+  async handler(ctx, args) {
+    try {
+      return await ctx.runAction(unsafeInternal.stripeConnect.refreshHostConnectStatusInternal, args);
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          source: "stripe.connect.refresh.scheduled",
+          hostId: String(args.hostId),
+          stripeConnectAccountId: args.stripeConnectAccountId,
+          error: error instanceof Error ? error.message : "unknown_error",
+        }),
+      );
+      return {
+        hasConnectAccount: true,
+        onboardingComplete: false,
+        chargesEnabled: false,
+        payoutsEnabled: false,
+        requiredActions: [],
+        disabledReason: "scheduled_refresh_failed",
+        preferredLinkType: "account_onboarding",
+        verificationUrl: null,
+        stripeConnectAccountId: args.stripeConnectAccountId,
+      };
+    }
   },
 });
 
@@ -249,6 +433,11 @@ export const resyncAllHostsFromStripeInternal = internalAction({
         stripeOnboardingComplete: Boolean(account.details_submitted),
         stripeChargesEnabled: Boolean(account.charges_enabled),
         stripePayoutsEnabled: Boolean(account.payouts_enabled),
+        stripeRequirementsCurrentlyDue: normalizeRequirements(account.requirements).currentlyDue,
+        stripeRequirementsPastDue: normalizeRequirements(account.requirements).pastDue,
+        stripeRequirementsEventuallyDue: normalizeRequirements(account.requirements).eventuallyDue,
+        stripeRequirementsPendingVerification: normalizeRequirements(account.requirements).pendingVerification,
+        stripeRequirementsDisabledReason: normalizeRequirements(account.requirements).disabledReason,
       });
 
       if (Boolean(account.payouts_enabled)) {

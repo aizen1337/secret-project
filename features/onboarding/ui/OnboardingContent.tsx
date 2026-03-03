@@ -16,6 +16,10 @@ type OnboardingContentProps = {
 
 export function OnboardingContent({ state, mode }: OnboardingContentProps) {
   const { t } = useTranslation();
+  const formatRequiredAction = (value: string) =>
+    value
+      .replace(/\./g, " -> ")
+      .replace(/_/g, " ");
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -98,7 +102,7 @@ export function OnboardingContent({ state, mode }: OnboardingContentProps) {
                     <Text className="text-xs text-muted-foreground">{t(`profile.verification.status.${state.driverLicenseStatus}`)}</Text>
                   </View>
                   <Pressable
-                    onPress={state.handleStartDriverLicense}
+                    onPress={() => state.handleStartDriverLicense("stripe")}
                     disabled={!state.renterEnabled || state.isStartingLicense || state.driverLicenseStatus === "verified"}
                     className={`mt-2 rounded-lg py-2 items-center ${
                       !state.renterEnabled || state.isStartingLicense || state.driverLicenseStatus === "verified"
@@ -109,31 +113,17 @@ export function OnboardingContent({ state, mode }: OnboardingContentProps) {
                     <Text className="text-sm font-semibold text-primary-foreground">
                       {state.driverLicenseStatus === "verified"
                         ? t("profile.verification.verified")
-                        : t("profile.verification.start")}
+                        : t("profile.verification.startStripe")}
                     </Text>
                   </Pressable>
-                </View>
-
-                <View className="mt-3 rounded-lg border border-border p-3 bg-secondary/20">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-sm font-semibold text-muted-foreground">{t("profile.verification.identityOptional")}</Text>
-                    <Text className="text-xs text-muted-foreground">{t(`profile.verification.status.${state.identityStatus}`)}</Text>
+                  <View className="mt-2 rounded-lg border border-border bg-secondary/20 px-3 py-2">
+                    <Text className="text-sm font-semibold text-muted-foreground">
+                      {t("profile.verification.startMobywatel")}
+                    </Text>
+                    <Text className="mt-1 text-xs text-muted-foreground">
+                      {t("profile.verification.mobywatelComingSoon")}
+                    </Text>
                   </View>
-                  <Pressable
-                    onPress={state.handleStartIdentity}
-                    disabled={!state.renterEnabled || state.isStartingIdentity || state.identityStatus === "verified"}
-                    className={`mt-2 rounded-lg py-2 items-center ${
-                      !state.renterEnabled || state.isStartingIdentity || state.identityStatus === "verified"
-                        ? "bg-primary/60"
-                        : "bg-primary"
-                    }`}
-                  >
-                    <Text className="text-sm font-semibold text-primary-foreground">
-                      {state.identityStatus === "verified"
-                        ? t("profile.verification.verified")
-                        : t("profile.verification.start")}
-                    </Text>
-                  </Pressable>
                 </View>
               </View>
             ) : null}
@@ -142,9 +132,9 @@ export function OnboardingContent({ state, mode }: OnboardingContentProps) {
               <View className="rounded-xl border border-border bg-card p-4">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-base font-semibold text-foreground">{t("onboarding.activation.host.title")}</Text>
-                  <View className={`rounded-full px-2 py-1 ${state.hostReady ? "bg-green-100" : "bg-secondary"}`}>
-                    <Text className={`text-xs font-semibold ${state.hostReady ? "text-green-700" : "text-muted-foreground"}`}>
-                      {state.hostReady ? t("onboarding.activation.status.ready") : t("onboarding.activation.status.pending")}
+                  <View className={`rounded-full px-2 py-1 ${state.hostVerified ? "bg-green-100" : "bg-secondary"}`}>
+                    <Text className={`text-xs font-semibold ${state.hostVerified ? "text-green-700" : "text-muted-foreground"}`}>
+                      {state.hostVerified ? t("onboarding.activation.status.ready") : t("onboarding.activation.status.pending")}
                     </Text>
                   </View>
                 </View>
@@ -154,13 +144,67 @@ export function OnboardingContent({ state, mode }: OnboardingContentProps) {
                     ? t("onboarding.activation.host.connectExists")
                     : t("onboarding.activation.host.connectMissing")}
                 </Text>
+                <Text className="mt-2 text-xs text-muted-foreground">
+                  {t(`onboarding.activation.host.state.${state.hostVerificationState}`)}
+                </Text>
+                {state.hostDisabledReason ? (
+                  <Text className="mt-1 text-xs text-amber-700">
+                    {t("onboarding.activation.host.disabledReason", { reason: state.hostDisabledReason })}
+                  </Text>
+                ) : null}
+
+                {state.hostRequiredActions.length > 0 ? (
+                  <View className="mt-2 rounded-lg border border-border bg-secondary/20 px-3 py-2">
+                    <Text className="text-xs font-semibold text-foreground">
+                      {t("onboarding.activation.host.requiredActionsTitle")}
+                    </Text>
+                    {state.hostRequiredActions.slice(0, 5).map((action) => (
+                      <Text key={action} className="mt-1 text-xs text-muted-foreground">
+                        {`\u2022 ${formatRequiredAction(action)}`}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+
+                <View className="mt-3 rounded-lg border border-border p-3">
+                  <View className="flex-row items-center justify-between py-1">
+                    <Text className="text-sm text-foreground">{t("onboarding.activation.host.capabilities.onboarding")}</Text>
+                    <Text className={`text-xs font-semibold ${state.hostOnboardingComplete ? "text-green-700" : "text-amber-700"}`}>
+                      {state.hostOnboardingComplete
+                        ? t("onboarding.activation.host.capability.enabled")
+                        : t("onboarding.activation.host.capability.disabled")}
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between py-1">
+                    <Text className="text-sm text-foreground">{t("onboarding.activation.host.capabilities.charges")}</Text>
+                    <Text className={`text-xs font-semibold ${state.hostChargesEnabled ? "text-green-700" : "text-amber-700"}`}>
+                      {state.hostChargesEnabled
+                        ? t("onboarding.activation.host.capability.enabled")
+                        : t("onboarding.activation.host.capability.disabled")}
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between py-1">
+                    <Text className="text-sm text-foreground">{t("onboarding.activation.host.capabilities.payouts")}</Text>
+                    <Text className={`text-xs font-semibold ${state.hostPayoutsEnabled ? "text-green-700" : "text-amber-700"}`}>
+                      {state.hostPayoutsEnabled
+                        ? t("onboarding.activation.host.capability.enabled")
+                        : t("onboarding.activation.host.capability.disabled")}
+                    </Text>
+                  </View>
+                </View>
                 <Pressable
                   onPress={state.handleStartHostSetup}
                   disabled={state.isStartingHostSetup}
                   className={`mt-3 rounded-lg py-2 items-center ${state.isStartingHostSetup ? "bg-primary/60" : "bg-primary"}`}
                 >
                   <Text className="text-sm font-semibold text-primary-foreground">
-                    {state.isStartingHostSetup ? t("common.loading") : t("common.actions.setUpPayouts")}
+                    {state.isStartingHostSetup
+                      ? t("common.loading")
+                      : state.hostVerificationState === "verified_ready"
+                        ? t("onboarding.activation.host.manageCompanyDetails")
+                        : state.hostIdentityDocumentRequired
+                          ? t("onboarding.activation.host.verifyIdentityDocument")
+                          : t("onboarding.activation.host.resolveRequiredActions")}
                   </Text>
                 </Pressable>
               </View>

@@ -11,12 +11,15 @@ type UseOnboardingActionsParams = {
   router: { replace: (path: any) => void };
   setOnboardingRole: (args: { role: OnboardingRole }) => Promise<unknown>;
   finalizeOnboarding: (args: { status: "completed" | "skipped" }) => Promise<unknown>;
-  startRenterIdentityCheck: (args: { returnUrl: string }) => Promise<{ url: string }>;
-  startRenterDriverLicenseCheck: (args: { returnUrl: string }) => Promise<{ url: string }>;
+  startRenterDriverLicenseCheck: (args: {
+    returnUrl: string;
+    provider: "stripe" | "mobywatel";
+  }) => Promise<{ url: string }>;
   createHostOnboardingLink: (args: {
     returnUrl: string;
     refreshUrl: string;
   }) => Promise<{ url: string }>;
+  refreshHostConnectStatus: (args: Record<string, never>) => Promise<{ verificationUrl?: string | null }>;
   toast: { error: (message: string) => void };
 };
 
@@ -42,14 +45,13 @@ export function useOnboardingActions({
   router,
   setOnboardingRole,
   finalizeOnboarding,
-  startRenterIdentityCheck,
   startRenterDriverLicenseCheck,
   createHostOnboardingLink,
+  refreshHostConnectStatus,
   toast,
 }: UseOnboardingActionsParams) {
   const [isSettingRole, setIsSettingRole] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const [isStartingIdentity, setIsStartingIdentity] = useState(false);
   const [isStartingLicense, setIsStartingLicense] = useState(false);
   const [isStartingHostSetup, setIsStartingHostSetup] = useState(false);
   const onboardingStepPrefix = isSignupSource ? "source=signup&step=activation" : "step=activation";
@@ -77,24 +79,11 @@ export function useOnboardingActions({
     }
   }, [finalizeOnboarding, router, t, toast]);
 
-  const handleStartIdentity = useCallback(async () => {
-    setIsStartingIdentity(true);
-    try {
-      const returnUrl = createOnboardingUrl(`${onboardingStepPrefix}&verification=return`);
-      const result = await startRenterIdentityCheck({ returnUrl });
-      await openExternalUrl(result.url);
-    } catch (error) {
-      toast.error(toLocalizedErrorMessage(error, t));
-    } finally {
-      setIsStartingIdentity(false);
-    }
-  }, [onboardingStepPrefix, startRenterIdentityCheck, t, toast]);
-
-  const handleStartDriverLicense = useCallback(async () => {
+  const handleStartDriverLicense = useCallback(async (provider: "stripe" | "mobywatel") => {
     setIsStartingLicense(true);
     try {
       const returnUrl = createOnboardingUrl(`${onboardingStepPrefix}&verification=return`);
-      const result = await startRenterDriverLicenseCheck({ returnUrl });
+      const result = await startRenterDriverLicenseCheck({ returnUrl, provider });
       await openExternalUrl(result.url);
     } catch (error) {
       toast.error(toLocalizedErrorMessage(error, t));
@@ -108,24 +97,26 @@ export function useOnboardingActions({
     try {
       const returnUrl = createOnboardingUrl(`${onboardingStepPrefix}&connect=return`);
       const refreshUrl = createOnboardingUrl(`${onboardingStepPrefix}&connect=refresh`);
-      const result = await createHostOnboardingLink({ returnUrl, refreshUrl });
+      const refreshed = await refreshHostConnectStatus({});
+      const result =
+        refreshed?.verificationUrl
+          ? { url: refreshed.verificationUrl }
+          : await createHostOnboardingLink({ returnUrl, refreshUrl });
       await openExternalUrl(result.url);
     } catch (error) {
       toast.error(toLocalizedErrorMessage(error, t));
     } finally {
       setIsStartingHostSetup(false);
     }
-  }, [createHostOnboardingLink, onboardingStepPrefix, t, toast]);
+  }, [createHostOnboardingLink, onboardingStepPrefix, refreshHostConnectStatus, t, toast]);
 
   return {
     isSettingRole,
     isFinalizing,
-    isStartingIdentity,
     isStartingLicense,
     isStartingHostSetup,
     handleSelectRole,
     handleFinalize,
-    handleStartIdentity,
     handleStartDriverLicense,
     handleStartHostSetup,
   };

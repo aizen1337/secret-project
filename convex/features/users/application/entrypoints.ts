@@ -2,6 +2,7 @@ import { mutation, query } from "../../../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../../../_generated/api";
 import { getCurrentUserOrNull, mapClerkUser } from "../../../userMapper";
+import { deriveHostVerificationState } from "../domain/hostVerificationState";
 
 const ONBOARDING_ROLE_VALUES = {
   renter: true,
@@ -175,15 +176,56 @@ export const getHostPayoutStatus = query({
         onboardingComplete: false,
         chargesEnabled: false,
         payoutsEnabled: false,
+        verificationState: "unverified" as const,
+        requiredActions: [] as string[],
+        disabledReason: null as string | null,
+        identityDocumentRequired: false,
         stripeConnectAccountId: null,
       };
     }
+    const hasConnectAccount = Boolean(host.stripeConnectAccountId);
+    const onboardingComplete = Boolean(host.stripeOnboardingComplete);
+    const chargesEnabled = Boolean(host.stripeChargesEnabled);
+    const payoutsEnabled = Boolean(host.stripePayoutsEnabled);
+    const requiredActions = [
+      ...new Set([
+        ...(Array.isArray((host as any).stripeRequirementsCurrentlyDue)
+          ? (host as any).stripeRequirementsCurrentlyDue
+          : []),
+        ...(Array.isArray((host as any).stripeRequirementsPastDue)
+          ? (host as any).stripeRequirementsPastDue
+          : []),
+        ...(Array.isArray((host as any).stripeRequirementsPendingVerification)
+          ? (host as any).stripeRequirementsPendingVerification
+          : []),
+        ...(Array.isArray((host as any).stripeRequirementsEventuallyDue)
+          ? (host as any).stripeRequirementsEventuallyDue
+          : []),
+      ]),
+    ] as string[];
+    const disabledReason =
+      typeof (host as any).stripeRequirementsDisabledReason === "string"
+        ? (host as any).stripeRequirementsDisabledReason
+        : null;
+    const identityDocumentRequired = requiredActions.some((action) =>
+      /verification\.document|verification\.additional_document/.test(action),
+    );
+
     return {
       hostVerified: Boolean(host.isVerified),
-      hasConnectAccount: Boolean(host.stripeConnectAccountId),
-      onboardingComplete: Boolean(host.stripeOnboardingComplete),
-      chargesEnabled: Boolean(host.stripeChargesEnabled),
-      payoutsEnabled: Boolean(host.stripePayoutsEnabled),
+      hasConnectAccount,
+      onboardingComplete,
+      chargesEnabled,
+      payoutsEnabled,
+      verificationState: deriveHostVerificationState({
+        hasConnectAccount,
+        onboardingComplete,
+        chargesEnabled,
+        payoutsEnabled,
+      }),
+      requiredActions,
+      disabledReason,
+      identityDocumentRequired,
       stripeConnectAccountId: host.stripeConnectAccountId ?? null,
     };
   },
