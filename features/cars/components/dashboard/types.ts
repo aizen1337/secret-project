@@ -1,5 +1,7 @@
 export type CarItem = {
   id: string;
+  offerId?: string;
+  carId?: string;
   title?: string;
   make: string;
   model: string;

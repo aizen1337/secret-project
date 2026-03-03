@@ -3,7 +3,12 @@ import { v } from "convex/values";
 
 export default defineSchema({
   users: defineTable({
-    clerkUserId: v.string(), // immutable identity
+    clerkUserId: v.optional(v.string()), // legacy identity (Clerk)
+    authProvider: v.optional(v.string()),
+    authSubject: v.optional(v.string()),
+    email: v.optional(v.string()),
+    emailNormalized: v.optional(v.string()),
+    lastAuthAt: v.optional(v.number()),
     name: v.string(),
     imageUrl: v.optional(v.string()),
     stripeCustomerId: v.optional(v.string()),
@@ -18,7 +23,10 @@ export default defineSchema({
     reviewCount: v.optional(v.number()),
     avgRating: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_clerk_id", ["clerkUserId"]),
+  })
+    .index("by_clerk_id", ["clerkUserId"])
+    .index("by_auth_subject", ["authSubject"])
+    .index("by_email_normalized", ["emailNormalized"]),
 
   hosts: defineTable({
     userId: v.id("users"),
@@ -86,6 +94,59 @@ export default defineSchema({
     .index("by_host", ["hostId"])
     .index("by_city", ["location.city"]),
 
+  car_offers: defineTable({
+    carId: v.id("cars"),
+    title: v.string(),
+    pricePerDay: v.number(),
+    availableFrom: v.string(),
+    availableUntil: v.string(),
+    formattedAddress: v.optional(v.string()),
+    location: v.object({
+      city: v.string(),
+      country: v.string(),
+      lat: v.number(),
+      lng: v.number(),
+    }),
+    isActive: v.boolean(),
+    isOfferVerified: v.boolean(),
+    verificationSource: v.optional(v.string()),
+    verifiedAt: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_car", ["carId"])
+    .index("by_active", ["isActive"])
+    .index("by_city", ["location.city"])
+    .index("by_active_city", ["isActive", "location.city"])
+    .index("by_active_bounds", ["isActive", "availableFrom", "availableUntil"]),
+
+  offer_availability_ranges: defineTable({
+    offerId: v.id("car_offers"),
+    startDate: v.string(),
+    endDate: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_offer", ["offerId"])
+    .index("by_offer_start", ["offerId", "startDate"]),
+
+  location_query_cache: defineTable({
+    queryKey: v.string(),
+    bestMatchPlaceId: v.optional(v.string()),
+    suggestions: v.array(
+      v.object({
+        description: v.string(),
+        placeId: v.string(),
+      }),
+    ),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_query_key", ["queryKey"])
+    .index("by_expires_at", ["expiresAt"]),
+
   recent_location_searches: defineTable({
     userId: v.id("users"),
     placeId: v.string(),
@@ -117,6 +178,7 @@ export default defineSchema({
 
   bookings: defineTable({
     carId: v.id("cars"),
+    offerId: v.optional(v.id("car_offers")),
     renterId: v.id("users"),
     startDate: v.string(),
     endDate: v.string(),
@@ -272,7 +334,7 @@ export default defineSchema({
       v.literal("verified"),
       v.literal("rejected"),
     ),
-    provider: v.union(v.literal("stripe")),
+    provider: v.union(v.literal("stripe"), v.literal("poland_local")),
     providerSessionId: v.optional(v.string()),
     verifiedAt: v.optional(v.number()),
     rejectionReason: v.optional(v.string()),
@@ -350,4 +412,22 @@ export default defineSchema({
     .index("by_booking", ["bookingId"])
     .index("by_host", ["hostId"])
     .index("by_payment_status", ["paymentId", "status"]),
+
+  loadtest_synthetic_samples: defineTable({
+    tag: v.string(),
+    bucket: v.number(),
+    payload: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_tag", ["tag"])
+    .index("by_tag_bucket", ["tag", "bucket"]),
+
+  loadtest_synthetic_counters: defineTable({
+    tag: v.string(),
+    key: v.string(),
+    value: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_tag", ["tag"])
+    .index("by_tag_key", ["tag", "key"]),
 });

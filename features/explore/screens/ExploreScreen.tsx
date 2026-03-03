@@ -1,4 +1,5 @@
 import { useColorScheme } from "nativewind";
+import { useMemo } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
@@ -6,14 +7,23 @@ import { useTranslation } from "react-i18next";
 import { DateRangePicker } from "@/features/shared-date-range/ui/DateRangePicker";
 import { Text } from "@/components/ui/text";
 import { BrowseHeader } from "@/features/cars/components/dashboard/BrowseHeader";
+import { CityWidgetsGrid } from "@/features/cars/components/dashboard/CityWidgetsGrid";
 import { LocationSearchBar } from "@/features/cars/components/dashboard/LocationSearchBar";
 import { OfferSection } from "@/features/cars/components/dashboard/OfferSection";
+import { getPolandCityQuickPicks } from "@/features/cars/components/dashboard/polandCities";
 import { useExploreScreenState } from "@/features/explore/hooks/useExploreScreenState";
 import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 export default function ExploreEntryScreen() {
   const { t } = useTranslation();
   const mode = resolveThemeMode(useColorScheme());
+  const biggestCitySuggestions = useMemo(
+    () =>
+      getPolandCityQuickPicks("")
+        .slice(0, 10)
+        .map((city) => ({ description: city.description, placeId: city.placeId })),
+    [],
+  );
   const {
     locationQuery,
     onChangeLocation,
@@ -90,6 +100,8 @@ export default function ExploreEntryScreen() {
               {isSearchingLocation ? t("common.loading") : t("explore.searchOffers")}
             </Text>
           </Pressable>
+
+          <CityWidgetsGrid cities={biggestCitySuggestions} onSelectCity={onSelectLocationSuggestion} />
 
           <OfferSection
             title={t("explore.promotions.recentTitle")}

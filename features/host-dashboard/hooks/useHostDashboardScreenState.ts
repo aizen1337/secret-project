@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 import { useMutation } from "convex/react";
 import { useTranslation } from "react-i18next";
 
@@ -13,7 +13,7 @@ export function useHostDashboardScreenState() {
   const { t } = useTranslation();
   const router = useRouter();
   const toast = useToast();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAppAuth();
   const signedIn = Boolean(isSignedIn);
 
   const archiveHostCar = useMutation(hostDashboardApi.archiveHostCar) as any;
@@ -49,3 +49,4 @@ export function useHostDashboardScreenState() {
 }
 
 export type HostDashboardScreenController = ReturnType<typeof useHostDashboardScreenState>;
+

@@ -21,7 +21,7 @@ type UseCarDetailBookingActionsParams = {
   endIso: string;
   selectedCollectionMethod: CollectionMethod;
   createCheckoutSession: (args: {
-    carId: Id<"cars">;
+    offerId: Id<"car_offers">;
     successUrl: string;
     cancelUrl: string;
     startDate: string;
@@ -80,7 +80,7 @@ export function useCarDetailBookingActions({
         ? `${webOrigin}/car/${car.id}?checkout=cancelled`
         : ExpoLinking.createURL(`/car/${car.id}?checkout=cancelled`);
       const checkout = await createCheckoutSession({
-        carId: car.id as Id<"cars">,
+        offerId: car.id as Id<"car_offers">,
         successUrl,
         cancelUrl,
         startDate: startIso,

@@ -464,6 +464,7 @@ export const handleStripeWebhookInternal = internalAction({
             providerSessionId: object.id,
             subjectType: "renter",
             checkType,
+            provider: "stripe",
             status: "pending",
           });
         }
@@ -480,6 +481,7 @@ export const handleStripeWebhookInternal = internalAction({
             providerSessionId: object.id,
             subjectType: "renter",
             checkType,
+            provider: "stripe",
             status: "verified",
           });
         }
@@ -503,6 +505,7 @@ export const handleStripeWebhookInternal = internalAction({
             providerSessionId: object.id,
             subjectType: "renter",
             checkType,
+            provider: "stripe",
             status: "rejected",
             rejectionReason,
           });

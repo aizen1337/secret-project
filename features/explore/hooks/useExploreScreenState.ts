@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { useRouter } from "expo-router";
 import { useAction, useMutation } from "convex/react";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 
 import { api } from "@/convex/_generated/api";
 import type { LocationSuggestion } from "@/features/cars/components/dashboard/searchUtils";
@@ -17,11 +17,12 @@ import {
 } from "@/features/explore/hooks/useExploreRecentHistory";
 import { useExplorePromotions } from "@/features/explore/hooks/useExplorePromotions";
 import { saveGuestRecentSearch } from "@/lib/recentSearches";
+import { getPolandCityDetailsByPlaceId } from "@/features/cars/components/dashboard/polandCities";
 
 export function useExploreScreenState() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
-  const { isSignedIn } = useAuth();
+  const { isSignedIn } = useAppAuth();
   const searchAddresses = useAction(api.cars.searchAddresses) as ExploreSearchAddressesAction;
   const resolveAddressDetails = useAction(api.cars.resolveAddressDetails) as any;
   const upsertRecentLocationSearch = useMutation(
@@ -62,16 +63,9 @@ export function useExploreScreenState() {
     [locationState, searchError],
   );
 
-  const onSelectLocationSuggestion = useCallback(
-    (suggestion: LocationSuggestion) => {
-      locationState.onSelectLocationSuggestion(suggestion);
-      if (searchError) setSearchError(null);
-    },
-    [locationState, searchError],
-  );
-
-  const handleSearchSubmit = useCallback(async () => {
-    const location = locationState.locationQuery.trim();
+  const executeSearch = useCallback(async (suggestionOverride?: LocationSuggestion) => {
+    if (isSearchingLocation) return;
+    const location = (suggestionOverride?.description ?? locationState.locationQuery).trim();
     if (!location) {
       setSearchError(t("explore.locationRequired"));
       return;
@@ -80,8 +74,9 @@ export function useExploreScreenState() {
     setSearchError(null);
 
     try {
-      let suggestion =
-        locationState.selectedLocationSuggestion &&
+      let suggestion = suggestionOverride
+        ? suggestionOverride
+        : locationState.selectedLocationSuggestion &&
         locationState.selectedLocationSuggestion.description.trim().toLowerCase() ===
           location.toLowerCase()
           ? locationState.selectedLocationSuggestion
@@ -110,11 +105,20 @@ export function useExploreScreenState() {
         }
       }
 
-      const details = await resolveAddressDetails({
-        placeId: suggestion.placeId,
-        sessionToken: placesSessionToken,
-        language: searchLanguage,
-      });
+      const quickPick = getPolandCityDetailsByPlaceId(suggestion.placeId);
+      const details = quickPick
+        ? {
+            city: quickPick.city,
+            country: quickPick.country,
+            lat: quickPick.lat,
+            lng: quickPick.lng,
+            formattedAddress: quickPick.description,
+          }
+        : await resolveAddressDetails({
+            placeId: suggestion.placeId,
+            sessionToken: placesSessionToken,
+            language: searchLanguage,
+          });
       locationState.onSelectLocationSuggestion(suggestion);
 
       try {
@@ -164,6 +168,7 @@ export function useExploreScreenState() {
     dateState.endHour,
     dateState.startDate,
     dateState.startHour,
+    isSearchingLocation,
     isSignedIn,
     locationState,
     placesSessionToken,
@@ -175,6 +180,19 @@ export function useExploreScreenState() {
     t,
     upsertRecentLocationSearch,
   ]);
+
+  const handleSearchSubmit = useCallback(() => {
+    void executeSearch();
+  }, [executeSearch]);
+
+  const onSelectLocationSuggestion = useCallback(
+    (suggestion: LocationSuggestion) => {
+      locationState.onSelectLocationSuggestion(suggestion);
+      if (searchError) setSearchError(null);
+      void executeSearch(suggestion);
+    },
+    [executeSearch, locationState, searchError],
+  );
 
   return {
     locationQuery: locationState.locationQuery,
@@ -197,3 +215,4 @@ export function useExploreScreenState() {
 }
 
 export type ExploreScreenController = ReturnType<typeof useExploreScreenState>;
+

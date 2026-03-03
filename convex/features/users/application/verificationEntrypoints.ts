@@ -7,6 +7,7 @@ import {
   evaluateRenterBookingEligibility,
   type VerificationCheckType,
   type VerificationProvider,
+  resolveDefaultVerificationProvider,
   type VerificationStatus,
   type VerificationSubjectType,
 } from "../../../verificationPolicy";
@@ -23,6 +24,7 @@ function isRenterVerificationEnabled() {
 function getIdentityReturnUrl(override?: string) {
   const raw =
     (override && override.trim()) ||
+    process.env.POLAND_VERIFICATION_RETURN_URL ||
     process.env.STRIPE_IDENTITY_RETURN_URL ||
     "http://localhost:8081/profile?verification=return";
   return assertAllowedRedirectUrl(raw, "returnUrl");
@@ -35,12 +37,16 @@ function defaultChecks(): Record<VerificationCheckType, VerificationStatus> {
   };
 }
 
-function getStripeSecretKey() {
-  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-  if (!stripeSecretKey) {
-    throw new Error("Missing STRIPE_SECRET_KEY in Convex environment.");
-  }
-  return stripeSecretKey;
+function getDefaultVerificationProvider(): VerificationProvider {
+  return resolveDefaultVerificationProvider(process.env.VERIFICATION_PROVIDER_DEFAULT);
+}
+
+function getVerificationRecertDays() {
+  const raw = String(process.env.POLAND_VERIFICATION_RECERT_DAYS ?? "").trim();
+  if (!raw) return 0;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.floor(parsed);
 }
 
 async function resolveChecksForUser(ctx: any, userId: any) {
@@ -233,8 +239,31 @@ async function startRenterCheck(ctx: any, checkType: VerificationCheckType, retu
   }
 
   const user = await ctx.runMutation(unsafeInternal.verification.ensureUserForVerificationInternal, {});
-  const provider = getVerificationProvider("stripe");
-  const session = await provider.createSession({
+  const recertDays = getVerificationRecertDays();
+  if (recertDays > 0) {
+    const existing = await ctx.db
+      .query("verification_checks")
+      .withIndex("by_user_subject_check", (q: any) =>
+        q.eq("userId", user._id).eq("subjectType", "renter").eq("checkType", checkType),
+      )
+      .first();
+    if (existing?.status === "verified" && typeof existing.verifiedAt === "number") {
+      const ageMs = Date.now() - existing.verifiedAt;
+      const cooldownMs = recertDays * 24 * 60 * 60 * 1000;
+      if (ageMs < cooldownMs) {
+        return {
+          sessionId:
+            existing.providerSessionId ?? `${existing.provider}-${String(existing._id)}-verified`,
+          status: "verified",
+          url: getIdentityReturnUrl(returnUrl),
+        };
+      }
+    }
+  }
+
+  const providerKey = getDefaultVerificationProvider();
+  const providerClient = getVerificationProvider(providerKey);
+  const session = await providerClient.createSession({
     checkType,
     subjectType: "renter",
     userId: String(user._id),
@@ -248,21 +277,12 @@ async function startRenterCheck(ctx: any, checkType: VerificationCheckType, retu
     userId: user._id,
     subjectType: "renter",
     checkType,
-    provider: "stripe",
+    provider: providerKey,
     providerSessionId: session.sessionId,
   });
 
   return session;
 }
-
-type StripeVerificationSessionResponse = {
-  id: string;
-  status: string;
-  metadata?: Record<string, string>;
-  last_error?: {
-    reason?: string;
-  };
-};
 
 const stripeVerificationSessionCache = new ActionCache(components.actionCache, {
   action: unsafeInternal.verification.fetchStripeVerificationSessionUncached,
@@ -270,20 +290,26 @@ const stripeVerificationSessionCache = new ActionCache(components.actionCache, {
   ttl: 60 * 1000,
 });
 
-function toInternalVerificationStatus(status: string): "pending" | "verified" | "rejected" {
-  if (status === "verified") return "verified";
-  if (status === "processing") return "pending";
-  if (status === "requires_input" || status === "canceled") return "rejected";
-  return "pending";
-}
+const polandLocalVerificationSessionCache = new ActionCache(components.actionCache, {
+  action: unsafeInternal.verification.fetchPolandLocalVerificationSessionUncached,
+  name: "poland-local-verification-session-v1",
+  ttl: 60 * 1000,
+});
 
-function toInternalRejectionReason(session: StripeVerificationSessionResponse): string | undefined {
-  if (session.status !== "requires_input" && session.status !== "canceled") return undefined;
-  return typeof session.last_error?.reason === "string"
-    ? session.last_error.reason
-    : session.status === "canceled"
-      ? "canceled"
-      : "requires_input";
+function toInternalVerificationStatus(status: string): "pending" | "verified" | "rejected" {
+  const normalized = String(status).trim().toLowerCase();
+  if (normalized === "approved" || normalized === "verified") return "verified";
+  if (normalized === "pending" || normalized === "processing") return "pending";
+  if (
+    normalized === "failed" ||
+    normalized === "rejected" ||
+    normalized === "needs_input" ||
+    normalized === "requires_input" ||
+    normalized === "canceled"
+  ) {
+    return "rejected";
+  }
+  return "pending";
 }
 
 export const ensureUserForVerificationInternal = internalMutation({
@@ -319,21 +345,17 @@ export const fetchStripeVerificationSessionUncached = internalAction({
   args: {
     sessionId: v.string(),
   },
-  async handler(_, args): Promise<StripeVerificationSessionResponse> {
-    const response = await fetch(
-      `https://api.stripe.com/v1/identity/verification_sessions/${encodeURIComponent(args.sessionId)}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${getStripeSecretKey()}`,
-        },
-      },
-    );
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload?.error?.message ?? "Stripe request failed.");
-    }
-    return payload as StripeVerificationSessionResponse;
+  async handler(_, args): Promise<any> {
+    return await getVerificationProvider("stripe").fetchSession(args.sessionId);
+  },
+});
+
+export const fetchPolandLocalVerificationSessionUncached = internalAction({
+  args: {
+    sessionId: v.string(),
+  },
+  async handler(_, args): Promise<any> {
+    return await getVerificationProvider("poland_local").fetchSession(args.sessionId);
   },
 });
 
@@ -341,14 +363,20 @@ export const findRenterCheckBySessionInternal = internalQuery({
   args: {
     sessionId: v.string(),
   },
-  async handler(ctx, args): Promise<{ checkType: VerificationCheckType } | null> {
+  async handler(
+    ctx,
+    args,
+  ): Promise<{ checkType: VerificationCheckType; provider: VerificationProvider } | null> {
     const checks = await ctx.db
       .query("verification_checks")
       .withIndex("by_provider_session", (q: any) => q.eq("providerSessionId", args.sessionId))
       .collect();
     const renterCheck = checks.find((check: any) => check.subjectType === "renter");
     if (renterCheck) {
-      return { checkType: renterCheck.checkType as VerificationCheckType };
+      return {
+        checkType: renterCheck.checkType as VerificationCheckType,
+        provider: renterCheck.provider as VerificationProvider,
+      };
     }
 
     const legacyIdentity = await ctx.db
@@ -356,14 +384,14 @@ export const findRenterCheckBySessionInternal = internalQuery({
       .withIndex("by_identity_session", (q: any) => q.eq("identitySessionId", args.sessionId))
       .first();
     if (legacyIdentity) {
-      return { checkType: "identity" };
+      return { checkType: "identity", provider: "stripe" };
     }
     const legacyLicense = await ctx.db
       .query("renter_verifications")
       .withIndex("by_driver_session", (q: any) => q.eq("driverLicenseSessionId", args.sessionId))
       .first();
     if (legacyLicense) {
-      return { checkType: "driver_license" };
+      return { checkType: "driver_license", provider: "stripe" };
     }
 
     return null;
@@ -428,33 +456,32 @@ export const syncRenterVerificationSession = action({
       throw new Error("NOT_FOUND: No verification session found to sync.");
     }
 
-    const session = (await stripeVerificationSessionCache.fetch(ctx, {
-      sessionId: resolved,
-    })) as StripeVerificationSessionResponse;
-
-    const metadataType =
-      session.metadata?.checkType === "driver_license" || session.metadata?.verificationType === "driver_license"
-        ? "driver_license"
-        : session.metadata?.checkType === "identity" || session.metadata?.verificationType === "identity"
-          ? "identity"
-          : undefined;
-
     const fallback = await ctx.runQuery(unsafeInternal.verification.findRenterCheckBySessionInternal, {
       sessionId: resolved,
     });
-    const checkType = (metadataType ?? fallback?.checkType ?? "driver_license") as VerificationCheckType;
+
+    const provider = (fallback?.provider ?? "stripe") as VerificationProvider;
+    const session =
+      provider === "poland_local"
+        ? await polandLocalVerificationSessionCache.fetch(ctx, { sessionId: resolved })
+        : await stripeVerificationSessionCache.fetch(ctx, { sessionId: resolved });
+
+    const checkType = (session?.checkType ?? fallback?.checkType ?? "driver_license") as VerificationCheckType;
 
     await ctx.runMutation(unsafeInternal.verification.updateCheckFromProviderSessionInternal, {
       providerSessionId: resolved,
       subjectType: "renter",
       checkType,
-      status: toInternalVerificationStatus(session.status),
-      rejectionReason: toInternalRejectionReason(session),
+      provider,
+      status: toInternalVerificationStatus(String(session.status)),
+      rejectionReason:
+        typeof session?.rejectionReason === "string" ? session.rejectionReason : undefined,
     });
 
     return {
       sessionId: resolved,
-      stripeStatus: session.status,
+      provider,
+      providerStatus: session.status,
       checkType,
       updated: true,
     };
@@ -498,7 +525,7 @@ export const upsertCheckSessionInternal = internalMutation({
     userId: v.id("users"),
     subjectType: v.union(v.literal("renter")),
     checkType: v.union(v.literal("identity"), v.literal("driver_license")),
-    provider: v.union(v.literal("stripe")),
+    provider: v.union(v.literal("stripe"), v.literal("poland_local")),
     providerSessionId: v.string(),
   },
   async handler(ctx, args) {
@@ -530,6 +557,7 @@ export const updateCheckFromProviderSessionInternal = internalMutation({
     providerSessionId: v.string(),
     subjectType: v.union(v.literal("renter")),
     checkType: v.union(v.literal("identity"), v.literal("driver_license")),
+    provider: v.union(v.literal("stripe"), v.literal("poland_local")),
     status: v.union(v.literal("pending"), v.literal("verified"), v.literal("rejected")),
     rejectionReason: v.optional(v.string()),
   },
@@ -561,7 +589,7 @@ export const updateCheckFromProviderSessionInternal = internalMutation({
         subjectType: args.subjectType,
         checkType: args.checkType,
         status: args.status,
-        provider: "stripe",
+        provider: args.provider,
         providerSessionId: args.providerSessionId,
         rejectionReason: args.status === "rejected" ? args.rejectionReason : undefined,
         verifiedAt: args.status === "verified" ? Date.now() : undefined,
@@ -582,6 +610,7 @@ export const updateCheckFromProviderSessionInternal = internalMutation({
     const now = Date.now();
     await ctx.db.patch(target._id, {
       status: args.status,
+      provider: args.provider,
       verifiedAt: args.status === "verified" ? now : undefined,
       rejectionReason: args.status === "rejected" ? args.rejectionReason : undefined,
       updatedAt: now,

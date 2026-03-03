@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Platform, useWindowDimensions } from "react-native";
 import { useAction, useQuery } from "convex/react";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 
@@ -20,10 +20,13 @@ export function useCarDetailScreenState() {
   const toast = useToast();
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
-  const { isSignedIn } = useAuth();
+  const { isSignedIn } = useAppAuth();
   const routeState = useCarDetailRouteState();
   const currentUser = useQuery(api.users.getCurrentUser);
-  const offer = useQuery(api.cars.getCarOfferById, routeState.carId ? { carId: routeState.carId } : "skip");
+  const offer = useQuery(
+    api.cars.getCarOfferById,
+    routeState.offerId ? { offerId: routeState.offerId } : "skip",
+  );
   const createCheckoutSession = useAction(api.stripe.createCheckoutSession) as any;
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [selectedCollectionMethod, setSelectedCollectionMethod] = useState<CollectionMethod>("in_person");
@@ -91,3 +94,4 @@ export function useCarDetailScreenState() {
 }
 
 export type CarDetailScreenController = ReturnType<typeof useCarDetailScreenState>;
+

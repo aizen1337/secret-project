@@ -43,12 +43,13 @@ for (const relativePath of wrapperFiles) {
 
   const source = fs.readFileSync(filePath, "utf8");
   const trimmed = source.trim();
+  const trimmedWithoutRuntimeDirective = trimmed.replace(/^["']use node["'];\s*/, "");
   const nonEmptyLines = trimmed
     .split(/\r?\n/g)
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (!trimmed.startsWith("export * from \"./features/")) {
+  if (!trimmedWithoutRuntimeDirective.startsWith("export * from \"./features/")) {
     violations.push(`${relativePath} is not delegating to a feature entrypoint.`);
   }
 

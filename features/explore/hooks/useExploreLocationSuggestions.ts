@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { LocationSuggestion } from "@/features/cars/components/dashboard/searchUtils";
+import { getPolandCityQuickPicks } from "@/features/cars/components/dashboard/polandCities";
 
 export type ExploreSearchAddressesAction = (args: {
   query: string;
@@ -28,9 +29,26 @@ export function useExploreLocationSuggestions({
 
   useEffect(() => {
     const trimmed = locationQuery.trim();
+    const normalizeKey = (value: string) => value.trim().toLowerCase();
+    const topCityMatches = getPolandCityQuickPicks(trimmed)
+      .slice(0, 1)
+      .map((city) => ({
+        description: city.description,
+        placeId: city.placeId,
+      }));
+    const mergeSuggestions = (preferred: LocationSuggestion[], fallback: LocationSuggestion[]) => {
+      const unique = new Map<string, LocationSuggestion>();
+      for (const item of [...preferred, ...fallback]) {
+        const key = `${item.placeId}::${normalizeKey(item.description)}`;
+        if (!unique.has(key)) unique.set(key, item);
+      }
+      return Array.from(unique.values());
+    };
+
     if (trimmed.length < 3) {
-      setLocationSuggestions([]);
-      setShowLocationSuggestions(false);
+      const quickPicks = topCityMatches;
+      setLocationSuggestions(quickPicks);
+      setShowLocationSuggestions(quickPicks.length > 0);
       setIsSearchingLocationSuggestions(false);
       return;
     }
@@ -53,12 +71,13 @@ export function useExploreLocationSuggestions({
           language: searchLanguage,
         });
         if (cancelled) return;
-        setLocationSuggestions(suggestions);
-        setShowLocationSuggestions(suggestions.length > 0);
+        const orderedSuggestions = mergeSuggestions(topCityMatches, suggestions);
+        setLocationSuggestions(orderedSuggestions);
+        setShowLocationSuggestions(orderedSuggestions.length > 0);
       } catch {
         if (cancelled) return;
-        setLocationSuggestions([]);
-        setShowLocationSuggestions(false);
+        setLocationSuggestions(topCityMatches);
+        setShowLocationSuggestions(topCityMatches.length > 0);
       } finally {
         if (!cancelled) setIsSearchingLocationSuggestions(false);
       }

@@ -72,6 +72,7 @@ export const updateRenterVerificationFromStripeSessionInternal = internalMutatio
       providerSessionId: args.sessionId,
       subjectType: "renter",
       checkType: args.verificationType,
+      provider: "stripe",
       status: args.status,
       rejectionReason: args.rejectionReason,
     });

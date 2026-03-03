@@ -1,21 +1,18 @@
 import { useCallback, useState } from "react";
-import { useSignUp, useSSO } from "@clerk/clerk-expo";
 import * as AuthSession from "expo-auth-session";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 
 import { useToast } from "@/components/feedback/useToast";
-import { useAuthSocialFlow } from "@/features/auth/hooks/useAuthSocialFlow";
+import { authClient } from "@/lib/auth/authClient";
 import { toLocalizedErrorMessage } from "@/lib/errors";
 
 export function useSignUpScreenState() {
   const { t } = useTranslation();
-  const { isLoaded, signUp, setActive } = useSignUp();
   const router = useRouter();
-  const { startSSOFlow } = useSSO();
   const toast = useToast();
   const redirectUrl = AuthSession.makeRedirectUri({ path: "sso-callback" });
-  const redirectUrlComplete = "/onboarding?source=signup";
+  const redirectUrlComplete = `${redirectUrl}?onboarding=1`;
 
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
@@ -23,58 +20,47 @@ export function useSignUpScreenState() {
   const [code, setCode] = useState("");
 
   const onSignUpPress = useCallback(async () => {
-    if (!isLoaded || !signUp) return;
     try {
-      await signUp.create({ emailAddress, password });
-      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
-      setPendingVerification(true);
+      const result = await authClient.signUp.email({
+        email: emailAddress.trim(),
+        password,
+        name: emailAddress.trim(),
+      });
+      if (result.error) throw result.error;
+      await authClient.getSession();
+      (authClient as any).updateSession?.();
+      setPendingVerification(false);
+      router.replace("/onboarding?source=signup");
     } catch (err) {
       console.error(JSON.stringify(err, null, 2));
       toast.error(toLocalizedErrorMessage(err, t, "auth.signUp.failedDetails"));
     }
-  }, [emailAddress, isLoaded, password, signUp, t, toast]);
+  }, [emailAddress, password, router, t, toast]);
 
   const onVerifyPress = useCallback(async () => {
-    if (!isLoaded || !signUp) return;
-    try {
-      const signUpAttempt = await signUp.attemptEmailAddressVerification({ code });
-      if (signUpAttempt.status === "complete") {
-        await setActive({
-          session: signUpAttempt.createdSessionId,
-          navigate: async ({ session }) => {
-            if (session?.currentTask) {
-              console.log(session?.currentTask);
-              return;
-            }
-            router.replace("/onboarding?source=signup");
-          },
-        });
-      } else {
-        console.error(JSON.stringify(signUpAttempt, null, 2));
-        toast.error(t("auth.signUp.verifyFailed"));
-      }
-    } catch (err) {
-      console.error(JSON.stringify(err, null, 2));
+    if (!code.trim()) {
       toast.error(t("auth.signUp.verifyFailed"));
     }
-  }, [code, isLoaded, router, setActive, signUp, t, toast]);
+  }, [code, t, toast]);
 
-  const onSocialPress = useAuthSocialFlow({
-    isLoaded,
-    redirectUrl,
-    redirectUrlComplete,
-    successPath: "/onboarding?source=signup",
-    cancelledKey: "auth.signUp.cancelled",
-    failedKey: "auth.signUp.failed",
-    t,
-    toast,
-    router,
-    authenticateWithRedirect: async (args) => {
-      if (!signUp) return;
-      await signUp.authenticateWithRedirect(args);
+  const onSocialPress = useCallback(
+    async (provider: "google" | "apple" | "facebook") => {
+      try {
+        const result = await authClient.signIn.social({
+          provider,
+          callbackURL: redirectUrlComplete,
+          errorCallbackURL: "/sign-up",
+          newUserCallbackURL: "/onboarding?source=signup",
+        });
+        if (result.error) throw result.error;
+        await authClient.getSession();
+        (authClient as any).updateSession?.();
+      } catch (err) {
+        toast.error(toLocalizedErrorMessage(err, t, "auth.signUp.failed"));
+      }
     },
-    startSSOFlow,
-  });
+    [redirectUrlComplete, t, toast],
+  );
 
   return {
     emailAddress,
@@ -91,3 +77,4 @@ export function useSignUpScreenState() {
 }
 
 export type SignUpScreenController = ReturnType<typeof useSignUpScreenState>;
+

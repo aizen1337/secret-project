@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAction, useMutation } from "convex/react";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 import { useTranslation } from "react-i18next";
 
 import { useToast } from "@/components/feedback/useToast";
@@ -28,7 +28,7 @@ export function useOnboardingScreenState() {
   const { t } = useTranslation();
   const router = useRouter();
   const toast = useToast();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAppAuth();
   const params = useLocalSearchParams<OnboardingParams>();
   const source = normalizeParam(params.source);
   const verificationParam = normalizeParam(params.verification);
@@ -90,3 +90,4 @@ export function useOnboardingScreenState() {
 }
 
 export type OnboardingScreenController = ReturnType<typeof useOnboardingScreenState>;
+

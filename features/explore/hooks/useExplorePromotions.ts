@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import type { TFunction } from "i18next";
 
@@ -8,10 +8,16 @@ import type {
   PromotionalOffer,
   RecentLocation,
 } from "@/features/cars/components/dashboard/types";
+import {
+  buildExploreFallbackCacheKey,
+  loadExploreFallbackOffersCache,
+  saveExploreFallbackOffersCache,
+} from "@/lib/explorePromotionsCache";
 
 type RecentOffersResult = {
   recentLocations: RecentLocation[];
   offers: PromotionalOffer[];
+  usedDefaultCities?: boolean;
   error: string | null;
 };
 
@@ -43,6 +49,8 @@ export function useExplorePromotions({
   endIso,
   guestRecentLocations,
 }: UseExplorePromotionsParams) {
+  const [cachedFallbackOffers, setCachedFallbackOffers] = useState<PromotionalOffer[] | null>(null);
+
   const recentServerLocations = useQuery(
     api.recentSearches.listMyRecentLocationSearches,
     isSignedIn ? { limit: 5 } : "skip",
@@ -54,7 +62,7 @@ export function useExplorePromotions({
       startDate: startIso,
       endDate: endIso,
       fallbackRecentLocations: guestRecentLocations,
-      limit: 6,
+      limit: 10,
     };
   }, [endIso, guestRecentLocations, isDateRangeValid, isGuestHistoryLoaded, startIso]);
 
@@ -70,11 +78,44 @@ export function useExplorePromotions({
   const hasRecentHistory =
     (recentOffersData?.recentLocations?.length ?? 0) > 0 ||
     (isSignedIn ? (recentServerLocations?.length ?? 0) : guestRecentLocations.length) > 0;
+  const cacheKey = buildExploreFallbackCacheKey({
+    startDate: startIso,
+    endDate: endIso,
+    isSignedIn,
+  });
+
+  useEffect(() => {
+    if (promoArgs === "skip") {
+      setCachedFallbackOffers(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const cached = await loadExploreFallbackOffersCache(cacheKey);
+      if (!cancelled) setCachedFallbackOffers(cached);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey, promoArgs]);
+
+  useEffect(() => {
+    if (!recentOffersData?.offers?.length) return;
+    if (!recentOffersData.usedDefaultCities) return;
+    void saveExploreFallbackOffersCache(cacheKey, recentOffersData.offers);
+  }, [cacheKey, recentOffersData]);
+
+  const recentOffers =
+    recentOffersData?.offers ?? (!hasRecentHistory ? cachedFallbackOffers ?? [] : []);
+  const recentSectionLoading =
+    promoArgs !== "skip" &&
+    recentOffersData === undefined &&
+    (hasRecentHistory || !cachedFallbackOffers);
 
   return {
-    recentOffers: recentOffersData?.offers ?? [],
+    recentOffers,
     nearbyOffers: nearbyBigCityOffersData?.offers ?? [],
-    recentSectionLoading: promoArgs !== "skip" && recentOffersData === undefined,
+    recentSectionLoading,
     nearbySectionLoading: promoArgs !== "skip" && nearbyBigCityOffersData === undefined,
     nearbySubtitle: nearbyBigCityOffersData?.city
       ? t("explore.promotions.nearbyCitySubtitle", {

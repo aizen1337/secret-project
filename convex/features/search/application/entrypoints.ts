@@ -1,6 +1,6 @@
 import { mutation, query } from "../../../_generated/server";
 import { v } from "convex/values";
-import { mapClerkUser } from "../../../userMapper";
+import { getCurrentUserOrNull, mapClerkUser } from "../../../userMapper";
 
 const MAX_RECENT_SEARCHES = 5;
 
@@ -95,13 +95,7 @@ export const listMyRecentLocationSearches = query({
     limit: v.optional(v.number()),
   },
   async handler(ctx, args) {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return [];
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
-      .first();
+    const user = await getCurrentUserOrNull(ctx);
     if (!user) return [];
 
     const limit = clampLimit(args.limit);

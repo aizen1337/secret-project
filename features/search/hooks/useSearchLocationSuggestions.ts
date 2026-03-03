@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { LocationSuggestion } from "@/features/cars/components/dashboard/searchUtils";
+import { getPolandCityQuickPicks } from "@/features/cars/components/dashboard/polandCities";
 
 export type SearchAddressesAction = (args: {
   query: string;
@@ -29,10 +30,22 @@ export function useSearchLocationSuggestions({
   const [isSearchingLocationSuggestions, setIsSearchingLocationSuggestions] = useState(false);
 
   useEffect(() => {
+    setLocationQuery(initialLocation);
+    setSelectedLocationSuggestion(null);
+    setLocationSuggestions([]);
+    setShowLocationSuggestions(false);
+    setIsSearchingLocationSuggestions(false);
+  }, [initialLocation]);
+
+  useEffect(() => {
     const trimmed = locationQuery.trim();
     if (trimmed.length < 3) {
-      setLocationSuggestions([]);
-      setShowLocationSuggestions(false);
+      const quickPicks = getPolandCityQuickPicks(trimmed).map((city) => ({
+        description: city.description,
+        placeId: city.placeId,
+      }));
+      setLocationSuggestions(quickPicks);
+      setShowLocationSuggestions(quickPicks.length > 0);
       setIsSearchingLocationSuggestions(false);
       return;
     }

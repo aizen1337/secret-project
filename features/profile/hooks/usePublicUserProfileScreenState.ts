@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 import { useQuery } from "convex/react";
 
 import type { Id } from "@/convex/_generated/dataModel";
@@ -37,7 +37,7 @@ function resolveInitialTab(roleParam: string | undefined): UserProfileTab {
 
 export function usePublicUserProfileScreenState() {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAppAuth();
   const params = useLocalSearchParams<{ userId?: string | string[]; role?: string | string[] }>();
   const userIdParam = normalizeParam(params.userId);
   const roleParam = normalizeParam(params.role);
@@ -64,3 +64,4 @@ export function usePublicUserProfileScreenState() {
 }
 
 export type PublicUserProfileScreenController = ReturnType<typeof usePublicUserProfileScreenState>;
+

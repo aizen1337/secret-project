@@ -4,7 +4,7 @@ import { View, Text, Pressable, Image, ScrollView } from "react-native";
 import { useColorScheme } from "nativewind";
 import { Link, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useAuth, useUser } from "@clerk/clerk-expo";
+import { useAppAuth, useAppUser } from "@/features/auth/hooks/useAppAuth";
 import { useQuery } from "convex/react";
 import { useTranslation } from "react-i18next";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,8 +22,8 @@ type MenuItem = {
 export default function ProfileScreen() {
   const { t } = useTranslation();
   const colorSchemeState = useColorScheme();
-  const { isLoaded, isSignedIn, signOut } = useAuth();
-  const { user } = useUser();
+  const { isLoaded, isSignedIn, signOut } = useAppAuth();
+  const { user } = useAppUser();
   const convexUser = useQuery(profileApi.getCurrentUser);
   const renterVerification = useQuery(profileApi.getMyRenterVerificationStatus);
   const hostPayoutStatus = useQuery(profileApi.getHostPayoutStatus);
@@ -210,3 +210,4 @@ export default function ProfileScreen() {
     </SafeAreaView>
   );
 }
+

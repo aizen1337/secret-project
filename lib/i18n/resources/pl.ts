@@ -446,6 +446,12 @@ export const pl = {
     locationSelectSuggestion: 'Wybierz lokalizacje z listy podpowiedzi.',
     locationNotFound: 'Nie znaleziono lokalizacji.',
     locationSearchFailed: 'Wyszukiwanie lokalizacji nie powiodlo sie.',
+    cityWidgetsTitle: 'Najpopularniejsze kierunki',
+    cityWidgetsSubtitle: '10 najwiekszych miast',
+    locationModalTitle: 'Wybierz lokalizacje',
+    locationModalTopCity: 'Najlepsze dopasowanie',
+    locationModalTopCities: 'Top 10 miast',
+    locationModalSuggestions: 'Wyniki autouzupelniania',
     makePlaceholder: 'Marka (np. BMW)',
     modelPlaceholder: 'Model (np. M3)',
     promotions: {

@@ -1,27 +1,28 @@
 import { action, internalQuery, mutation, query } from "../../../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../../../_generated/api";
-import { mapClerkUser } from "../../../userMapper";
+import { getCurrentUserOrNull, mapClerkUser } from "../../../userMapper";
 import { assertCarIsBookable } from "../../../guards/bookingGuard";
 import { assertRenterCanBook } from "../../../guards/renterVerificationGuard";
 import { getBookingChatSendState } from "../../../bookingChat";
 import {
+  buildTripStartCollectionConfirmationPatch,
   calculateBillableDays,
   canCancelReservation,
   canPayNowForBooking,
   canRetryPayoutForHost,
-} from "../domain/bookingPolicies";
+  getLockboxCodeVisibility,
+  type TripStartCollectionMethod,
+} from "../domain";
 
 const internalApi: any = internal;
-const LOCKBOX_REVEAL_WINDOW_MS = 2 * 60 * 60 * 1000;
-type CollectionMethod = "in_person" | "lockbox" | "host_delivery";
 
-function normalizeCollectionMethod(method: unknown): CollectionMethod {
+function normalizeCollectionMethod(method: unknown): TripStartCollectionMethod {
   if (method === "lockbox" || method === "host_delivery") return method;
   return "in_person";
 }
 
-function getCollectionInstructions(booking: any, method: CollectionMethod) {
+function getCollectionInstructions(booking: any, method: TripStartCollectionMethod) {
   if (method === "lockbox") return booking.collectionLockboxInstructions ?? null;
   if (method === "host_delivery") return booking.collectionDeliveryInstructions ?? null;
   return booking.collectionInPersonInstructions ?? null;
@@ -49,9 +50,21 @@ async function getChatMetaForBooking(
   };
 }
 
+async function resolveOfferForBooking(ctx: any, booking: any) {
+  if (booking.offerId) {
+    const byId = await ctx.db.get(booking.offerId);
+    if (byId) return byId;
+  }
+  return await ctx.db
+    .query("car_offers")
+    .withIndex("by_car", (q: any) => q.eq("carId", booking.carId))
+    .first();
+}
+
 export const createBooking = mutation({
   args: {
-    carId: v.id("cars"),
+    offerId: v.optional(v.id("car_offers")),
+    carId: v.optional(v.id("cars")),
     startDate: v.string(),
     endDate: v.string(),
   },
@@ -59,11 +72,39 @@ export const createBooking = mutation({
     await assertRenterCanBook(ctx);
     const user = await mapClerkUser(ctx);
 
+    let offer: any = null;
+    if (args.offerId) {
+      offer = await ctx.db.get(args.offerId);
+      if (!offer || !offer.isActive) {
+        throw new Error("NOT_FOUND: Offer not found.");
+      }
+    }
+    const resolvedCarId = offer?.carId ?? args.carId;
+    if (!resolvedCarId) {
+      throw new Error("INVALID_INPUT: offerId or carId is required.");
+    }
+
     const car = await assertCarIsBookable(
       ctx,
-      args.carId,
+      resolvedCarId,
       args
     );
+    if (offer) {
+      const ranges = await ctx.db
+        .query("offer_availability_ranges")
+        .withIndex("by_offer", (q: any) => q.eq("offerId", offer._id))
+        .collect();
+      const startTs = new Date(args.startDate).getTime();
+      const endTs = new Date(args.endDate).getTime();
+      const covered = ranges.some((range: any) => {
+        const rangeStart = new Date(range.startDate).getTime();
+        const rangeEnd = new Date(range.endDate).getTime();
+        return Number.isFinite(rangeStart) && Number.isFinite(rangeEnd) && startTs >= rangeStart && endTs <= rangeEnd;
+      });
+      if (!covered) {
+        throw new Error("INVALID_INPUT: Offer is not available for the selected dates.");
+      }
+    }
     const host = (await ctx.db.get(car.hostId as any)) as any;
     if (!host) {
       throw new Error("NOT_FOUND: Host not found.");
@@ -76,11 +117,12 @@ export const createBooking = mutation({
 
     return await ctx.db.insert("bookings", {
       carId: car._id,
+      offerId: offer?._id,
       renterId: user._id,
       startDate: args.startDate,
       endDate: args.endDate,
       status: "payment_pending",
-      totalPrice: days * car.pricePerDay,
+      totalPrice: days * (offer?.pricePerDay ?? car.pricePerDay),
       createdAt: Date.now(),
     });
   },
@@ -89,14 +131,7 @@ export const createBooking = mutation({
 export const listMyTripsWithPayments = query({
   args: {},
   async handler(ctx) {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return [];
-    }
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
-      .first();
+    const user = await getCurrentUserOrNull(ctx);
     if (!user) {
       return [];
     }
@@ -191,7 +226,9 @@ export const listMyTripsWithPayments = query({
         booking,
         car: car
           ? {
-              id: car._id,
+              id: booking.offerId ?? car._id,
+              offerId: booking.offerId ?? null,
+              carId: car._id,
               title: car.title,
               make: car.make,
               model: car.model,
@@ -243,15 +280,7 @@ export const getBookingDetails = query({
     bookingId: v.id("bookings"),
   },
   async handler(ctx, args) {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return null;
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
-      .first();
+    const user = await getCurrentUserOrNull(ctx);
     if (!user) {
       return null;
     }
@@ -265,6 +294,7 @@ export const getBookingDetails = query({
     if (!car) {
       return null;
     }
+    const offer = await resolveOfferForBooking(ctx, booking);
 
     const host = await ctx.db.get(car.hostId);
     if (!host) {
@@ -297,14 +327,12 @@ export const getBookingDetails = query({
     const canReview = booking.status === "completed" && !myReview;
     const collectionMethod = normalizeCollectionMethod(booking.collectionMethod);
     const collectionInstructions = getCollectionInstructions(booking, collectionMethod);
-    const tripStartTs = new Date(booking.startDate).getTime();
-    const lockboxCodeVisibleAt =
-      Number.isFinite(tripStartTs) && collectionMethod === "lockbox"
-        ? tripStartTs - LOCKBOX_REVEAL_WINDOW_MS
-        : null;
-    const isLockboxCodeVisible =
-      collectionMethod === "lockbox" &&
-      (isHost || (isRenter && typeof lockboxCodeVisibleAt === "number" && Date.now() >= lockboxCodeVisibleAt));
+    const { lockboxCodeVisibleAt, isLockboxCodeVisible } = getLockboxCodeVisibility({
+      method: collectionMethod,
+      viewerRole: isHost ? "host" : "renter",
+      startDate: booking.startDate,
+      now: Date.now(),
+    });
 
     return {
       viewerRole: isHost ? "host" : "renter",
@@ -318,16 +346,30 @@ export const getBookingDetails = query({
         updatedAt: booking.updatedAt ?? null,
       },
       car: {
-        id: car._id,
-        title: car.title,
+        id: offer?._id ?? booking.offerId ?? car._id,
+        offerId: offer?._id ?? booking.offerId ?? null,
+        carId: car._id,
+        title: offer?.title ?? car.title,
         make: car.make,
         model: car.model,
         year: car.year,
-        pricePerDay: car.pricePerDay,
+        pricePerDay: offer?.pricePerDay ?? car.pricePerDay,
         images: car.images,
-        formattedAddress: car.formattedAddress ?? null,
-        location: car.location,
+        formattedAddress: offer?.formattedAddress ?? car.formattedAddress ?? null,
+        location: offer?.location ?? car.location,
       },
+      offer: offer
+        ? {
+            id: offer._id,
+            carId: offer.carId,
+            title: offer.title ?? car.title,
+            pricePerDay: offer.pricePerDay,
+            location: offer.location,
+            formattedAddress: offer.formattedAddress ?? null,
+            availableFrom: offer.availableFrom,
+            availableUntil: offer.availableUntil,
+          }
+        : null,
       hostUser: hostUser
         ? {
             id: hostUser._id,
@@ -397,13 +439,13 @@ export const retryHostPayoutTransfer = action({
     bookingId: v.id("bookings"),
   },
   async handler(ctx, args) {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
+    const user = await getCurrentUserOrNull(ctx);
+    if (!user) {
       throw new Error("UNAUTHORIZED: Sign in required.");
     }
 
     const scoped = await ctx.runQuery(internalApi.bookings.getHostRetryPaymentInternal, {
-      clerkUserId: identity.subject,
+      clerkUserId: String(user.clerkUserId ?? user.authSubject ?? ""),
       bookingId: args.bookingId,
     });
     if (!scoped.ok || !scoped.paymentId) {
@@ -481,14 +523,7 @@ export const getHostRetryPaymentInternal = internalQuery({
 export const listHostBookingsWithPayouts = query({
   args: {},
   async handler(ctx) {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return [];
-    }
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
-      .first();
+    const user = await getCurrentUserOrNull(ctx);
     if (!user) {
       return [];
     }
@@ -668,36 +703,14 @@ export const confirmTripStartCollection = mutation({
     if (!isRenter && !isHost) {
       throw new Error("UNAUTHORIZED: You cannot confirm this trip start.");
     }
-    if (booking.status !== "confirmed" && booking.status !== "in_progress") {
-      throw new Error("INVALID_INPUT: Trip start confirmation is unavailable for this booking.");
-    }
-
-    const tripStartTs = new Date(booking.startDate).getTime();
-    if (!Number.isFinite(tripStartTs)) {
-      throw new Error("INVALID_INPUT: Booking start date is invalid.");
-    }
-    const lockboxCodeVisibleAt = tripStartTs - LOCKBOX_REVEAL_WINDOW_MS;
     const now = Date.now();
-    if (now < lockboxCodeVisibleAt) {
-      throw new Error("INVALID_INPUT: Trip collection can be confirmed only near the trip start.");
-    }
-
-    const patch: Record<string, unknown> = {};
-    if (isHost && !booking.hostCollectionConfirmedAt) {
-      patch.hostCollectionConfirmedAt = now;
-    }
-    if (isRenter && !booking.renterCollectionConfirmedAt) {
-      patch.renterCollectionConfirmedAt = now;
-    }
-    if (isRenter && booking.status === "confirmed") {
-      patch.status = "in_progress";
-    }
-    if (isRenter && !booking.tripStartedAt) {
-      patch.tripStartedAt = now;
-    }
+    const { patch, lockboxCodeVisibleAt } = buildTripStartCollectionConfirmationPatch({
+      booking,
+      actorRole: isHost ? "host" : "renter",
+      now,
+    });
 
     if (Object.keys(patch).length > 0) {
-      patch.updatedAt = now;
       await ctx.db.patch(booking._id, patch);
     }
 

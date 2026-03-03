@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { TFunction } from "i18next";
 import type { LocationSuggestion } from "@/features/cars/components/dashboard/searchUtils";
 import type { SearchAddressesAction } from "@/features/search/hooks/useSearchLocationSuggestions";
+import { getPolandCityDetailsByPlaceId } from "@/features/cars/components/dashboard/polandCities";
 export type ResolveAddressDetailsAction = (args: {
   placeId: string;
   sessionToken: string;
@@ -47,6 +48,23 @@ export function useSearchUiInteractions({
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"grid" | "map">("grid");
+
+  useEffect(() => {
+    setStartDate(defaults.startDate);
+    setEndDate(defaults.endDate);
+    setStartHour(defaults.startHour);
+    setEndHour(defaults.endHour);
+    setSearchCenter({ lat: defaults.centerLat, lng: defaults.centerLng });
+    setSearchError(null);
+  }, [
+    defaults.centerLat,
+    defaults.centerLng,
+    defaults.endDate,
+    defaults.endHour,
+    defaults.startDate,
+    defaults.startHour,
+  ]);
+
   const onApplyDates = useCallback((nextStartDate: string, nextEndDate: string) => {
     setStartDate(nextStartDate);
     setEndDate(nextEndDate);
@@ -91,11 +109,14 @@ export function useSearchUiInteractions({
         return;
       }
     }
-    const details = await actions.resolveAddressDetails({
-        placeId: suggestion.placeId,
-        sessionToken: actions.placesSessionToken,
-        language: actions.searchLanguage,
-      });
+      const quickPick = getPolandCityDetailsByPlaceId(suggestion.placeId);
+      const details = quickPick
+        ? { lat: quickPick.lat, lng: quickPick.lng }
+        : await actions.resolveAddressDetails({
+            placeId: suggestion.placeId,
+            sessionToken: actions.placesSessionToken,
+            language: actions.searchLanguage,
+          });
       setSearchCenter({ lat: details.lat, lng: details.lng });
       location.select(suggestion);
       router.replace({

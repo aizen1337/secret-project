@@ -1,12 +1,13 @@
 // convex/cars.ts
-import { action, internalAction, internalMutation, mutation, query } from "../../../_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "../../../_generated/server";
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { ActionCache } from "@convex-dev/action-cache";
 import { mapHost } from "../../../hostMapper";
-import { mapClerkUser } from "../../../userMapper";
+import { getCurrentUserOrNull, mapClerkUser } from "../../../userMapper";
 import { components, internal } from "../../../_generated/api";
-import { normalizeCollectionMethods } from "../domain";
+import { buildValidatedCollectionConfig, normalizeCollectionMethods } from "../domain";
+import { getDefaultOfferByCarId, replaceOfferAvailabilityRanges, upsertDefaultOfferForCar } from "./offerPersistence";
 
 type CarLocation = {
   city: string;
@@ -41,40 +42,13 @@ type UpsertCarPayload = {
   location: CarLocation;
 };
 
+const LOCATION_QUERY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
 const FUEL_POLICIES = ["full_to_full", "same_to_same", "fuel_included"] as const;
 const EXTERNAL_API_RATE_WINDOW_MS = 60 * 1000;
 const VIN_LOOKUP_LIMIT_PER_WINDOW = 6;
 const ADDRESS_SEARCH_LIMIT_PER_WINDOW = 30;
 const ADDRESS_DETAILS_LIMIT_PER_WINDOW = 30;
-
-function buildCollectionConfig(args: UpsertCarPayload) {
-  const collectionMethods = normalizeCollectionMethods(args.collectionMethods);
-  const inPersonInstructions = args.collectionInPersonInstructions?.trim() || undefined;
-  const lockboxCode = args.collectionLockboxCode?.trim() || undefined;
-  const lockboxInstructions = args.collectionLockboxInstructions?.trim() || undefined;
-  const deliveryInstructions = args.collectionDeliveryInstructions?.trim() || undefined;
-
-  if (collectionMethods.includes("lockbox") && !lockboxCode) {
-    throw new Error("Lockbox code is required when lockbox collection is enabled.");
-  }
-  if (collectionMethods.includes("host_delivery") && !deliveryInstructions) {
-    throw new Error("Delivery instructions are required when host delivery is enabled.");
-  }
-
-  return {
-    collectionMethods,
-    collectionInPersonInstructions: collectionMethods.includes("in_person")
-      ? inPersonInstructions
-      : undefined,
-    collectionLockboxCode: collectionMethods.includes("lockbox") ? lockboxCode : undefined,
-    collectionLockboxInstructions: collectionMethods.includes("lockbox")
-      ? lockboxInstructions
-      : undefined,
-    collectionDeliveryInstructions: collectionMethods.includes("host_delivery")
-      ? deliveryInstructions
-      : undefined,
-  };
-}
 
 function validateCarPayload(args: UpsertCarPayload) {
   const maxYear = new Date().getFullYear() + 1;
@@ -105,7 +79,13 @@ function validateCarPayload(args: UpsertCarPayload) {
     throw new Error("Fuel policy is invalid.");
   }
 
-  return buildCollectionConfig(args);
+  return buildValidatedCollectionConfig({
+    collectionMethods: args.collectionMethods,
+    collectionInPersonInstructions: args.collectionInPersonInstructions,
+    collectionLockboxCode: args.collectionLockboxCode,
+    collectionLockboxInstructions: args.collectionLockboxInstructions,
+    collectionDeliveryInstructions: args.collectionDeliveryInstructions,
+  });
 }
 
 async function resolveImageUrls(
@@ -180,7 +160,7 @@ export const createCar = mutation({
       return existingCar._id;
     }
 
-    return await ctx.db.insert("cars", {
+    const carId = await ctx.db.insert("cars", {
       hostId: host._id,
       title: args.title.trim(),
       make: args.make.trim(),
@@ -214,6 +194,18 @@ export const createCar = mutation({
       updatedAt: Date.now(),
       createdAt: Date.now(),
     });
+    await upsertDefaultOfferForCar(ctx, {
+      carId,
+      title: args.title.trim(),
+      pricePerDay: args.pricePerDay,
+      availableFrom: args.availableFrom,
+      availableUntil: args.availableUntil,
+      formattedAddress: args.formattedAddress?.trim() || undefined,
+      location: args.location,
+      isActive: true,
+      isOfferVerified: false,
+    });
+    return carId;
   },
 });
 
@@ -222,12 +214,7 @@ export const getHostCarById = query({
     carId: v.id("cars"),
   },
   async handler(ctx, args) {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
-      .first();
+    const user = await getCurrentUserOrNull(ctx);
     if (!user) return null;
     const host = await ctx.db
       .query("hosts")
@@ -334,6 +321,19 @@ export const updateHostCar = mutation({
       images,
       updatedAt: Date.now(),
     });
+    await upsertDefaultOfferForCar(ctx, {
+      carId: args.carId,
+      title: args.title.trim(),
+      pricePerDay: args.pricePerDay,
+      availableFrom: args.availableFrom,
+      availableUntil: args.availableUntil,
+      formattedAddress: args.formattedAddress?.trim() || undefined,
+      location: args.location,
+      isActive: car.isActive ?? true,
+      isOfferVerified: Boolean(car.isCarVerified),
+      verificationSource: car.verificationSource || undefined,
+      verifiedAt: car.verifiedAt || undefined,
+    });
 
     return args.carId;
   },
@@ -359,6 +359,14 @@ export const archiveHostCar = mutation({
       archivedAt: Date.now(),
       updatedAt: Date.now(),
     });
+    const offer = await getDefaultOfferByCarId(ctx, args.carId);
+    if (offer) {
+      await ctx.db.patch(offer._id, {
+        isActive: false,
+        archivedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
 
     return args.carId;
   },
@@ -384,6 +392,14 @@ export const unarchiveHostCar = mutation({
       archivedAt: undefined,
       updatedAt: Date.now(),
     });
+    const offer = await getDefaultOfferByCarId(ctx, args.carId);
+    if (offer) {
+      await ctx.db.patch(offer._id, {
+        isActive: true,
+        archivedAt: undefined,
+        updatedAt: Date.now(),
+      });
+    }
 
     return args.carId;
   },
@@ -404,6 +420,20 @@ export const deleteHostCar = mutation({
       throw new Error("Unauthorized: You cannot delete this listing.");
     }
 
+    const offers = await ctx.db
+      .query("car_offers")
+      .withIndex("by_car", (q: any) => q.eq("carId", args.carId))
+      .collect();
+    for (const offer of offers) {
+      const ranges = await ctx.db
+        .query("offer_availability_ranges")
+        .withIndex("by_offer", (q: any) => q.eq("offerId", offer._id))
+        .collect();
+      for (const range of ranges) {
+        await ctx.db.delete(range._id);
+      }
+      await ctx.db.delete(offer._id);
+    }
     await ctx.db.delete(args.carId);
     return args.carId;
   },
@@ -581,6 +611,9 @@ export const consumeExternalApiBudgetInternal = internalMutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       // Allow anonymous address autocomplete from the landing page.
+      if (args.action === "vin_lookup") {
+        throw new Error("Unauthorized");
+      }
       return { remaining: Math.max(0, args.limit - 1) };
     }
 
@@ -647,7 +680,10 @@ export const verifyAndAutofillCarFromVin = action({
     registrationDate: v.string(),
   },
   async handler(ctx, args): Promise<VinLookupResult> {
-    await mapClerkUser(ctx);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthorized");
+    }
     return await vinLookupCache.fetch(ctx, {
       vin: args.vin.trim().toUpperCase(),
       registrationNumber: args.registrationNumber.trim().toUpperCase(),
@@ -679,6 +715,64 @@ const addressDetailsCache = new ActionCache(components.actionCache, {
   action: internal.cars.resolveAddressDetailsUncached,
   name: "address-details-v2",
   ttl: 60 * 60 * 1000,
+});
+
+function buildLocationQueryCacheKey(query: string, language: string) {
+  return `${query.trim().toLowerCase()}::${language.trim().toLowerCase()}::pl`;
+}
+
+export const getLocationQueryCacheInternal = internalQuery({
+  args: {
+    queryKey: v.string(),
+  },
+  async handler(ctx, args) {
+    const row = await ctx.db
+      .query("location_query_cache")
+      .withIndex("by_query_key", (q: any) => q.eq("queryKey", args.queryKey))
+      .first();
+    if (!row) return null;
+    if (Date.now() > row.expiresAt) return null;
+    return row;
+  },
+});
+
+export const upsertLocationQueryCacheInternal = internalMutation({
+  args: {
+    queryKey: v.string(),
+    suggestions: v.array(
+      v.object({
+        description: v.string(),
+        placeId: v.string(),
+      }),
+    ),
+    bestMatchPlaceId: v.optional(v.string()),
+    ttlMs: v.optional(v.number()),
+  },
+  async handler(ctx, args) {
+    const now = Date.now();
+    const ttlMs = Math.max(60_000, Math.round(args.ttlMs ?? LOCATION_QUERY_CACHE_TTL_MS));
+    const existing = await ctx.db
+      .query("location_query_cache")
+      .withIndex("by_query_key", (q: any) => q.eq("queryKey", args.queryKey))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        suggestions: args.suggestions,
+        bestMatchPlaceId: args.bestMatchPlaceId,
+        expiresAt: now + ttlMs,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+    return await ctx.db.insert("location_query_cache", {
+      queryKey: args.queryKey,
+      suggestions: args.suggestions,
+      bestMatchPlaceId: args.bestMatchPlaceId,
+      expiresAt: now + ttlMs,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
 });
 
 export const searchAddressesUncached = internalAction({
@@ -818,10 +912,24 @@ export const searchAddresses = action({
     if (!rawQuery) return [];
     void args.sessionToken;
     const language = normalizeAddressLanguage(args.language);
-    return await addressSearchCache.fetch(ctx, {
+    const queryKey = buildLocationQueryCacheKey(rawQuery, language);
+    const cached = await ctx.runQuery(internal.cars.getLocationQueryCacheInternal as any, {
+      queryKey,
+    });
+    if (cached?.suggestions?.length) {
+      return cached.suggestions as AddressSuggestion[];
+    }
+    const suggestions = await addressSearchCache.fetch(ctx, {
       query: rawQuery.toLowerCase(),
       language,
     });
+    await ctx.runMutation(internal.cars.upsertLocationQueryCacheInternal as any, {
+      queryKey,
+      suggestions,
+      bestMatchPlaceId: suggestions[0]?.placeId ?? undefined,
+      ttlMs: LOCATION_QUERY_CACHE_TTL_MS,
+    });
+    return suggestions;
   },
 });
 
@@ -848,6 +956,25 @@ const NEARBY_CITY_RADIUS_KM = 250;
 const NEARBY_CITY_FALLBACK_RADIUS_KM = 500;
 const RECENT_LOCATIONS_MAX = 5;
 const RECENT_LOCATIONS_FOR_SECTION = 3;
+const POLAND_TOP_10_CITIES: Array<{
+  placeId: string;
+  description: string;
+  city: string;
+  country: string;
+  lat: number;
+  lng: number;
+}> = [
+  { placeId: "CITY:WARSAW", description: "Warsaw, Poland", city: "Warsaw", country: "Poland", lat: 52.2297, lng: 21.0122 },
+  { placeId: "CITY:KRAKOW", description: "Krakow, Poland", city: "Krakow", country: "Poland", lat: 50.0647, lng: 19.945 },
+  { placeId: "CITY:LODZ", description: "Lodz, Poland", city: "Lodz", country: "Poland", lat: 51.7592, lng: 19.456 },
+  { placeId: "CITY:WROCLAW", description: "Wroclaw, Poland", city: "Wroclaw", country: "Poland", lat: 51.1079, lng: 17.0385 },
+  { placeId: "CITY:POZNAN", description: "Poznan, Poland", city: "Poznan", country: "Poland", lat: 52.4064, lng: 16.9252 },
+  { placeId: "CITY:GDANSK", description: "Gdansk, Poland", city: "Gdansk", country: "Poland", lat: 54.352, lng: 18.6466 },
+  { placeId: "CITY:SZCZECIN", description: "Szczecin, Poland", city: "Szczecin", country: "Poland", lat: 53.4285, lng: 14.5528 },
+  { placeId: "CITY:BYDGOSZCZ", description: "Bydgoszcz, Poland", city: "Bydgoszcz", country: "Poland", lat: 53.1235, lng: 18.0084 },
+  { placeId: "CITY:LUBLIN", description: "Lublin, Poland", city: "Lublin", country: "Poland", lat: 51.2465, lng: 22.5684 },
+  { placeId: "CITY:BIALYSTOK", description: "Bialystok, Poland", city: "Bialystok", country: "Poland", lat: 53.1325, lng: 23.1688 },
+];
 const RENTAL_LOOKBACK_DAYS = 180;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const RENTAL_SIGNAL_STATUSES = new Set(["paid", "confirmed", "completed"]);
@@ -1054,7 +1181,29 @@ async function collectBlockingCarIdsForRange(
   endDate: string,
   candidateCarIds?: Set<string>,
 ) {
-  const [pending, confirmed] = await Promise.all([
+  if (candidateCarIds && candidateCarIds.size > 0) {
+    const blocked = new Set<string>();
+    const blockingStatuses = new Set(["payment_pending", "confirmed", "in_progress"]);
+    for (const carId of candidateCarIds) {
+      const bookings = await ctx.db
+        .query("bookings")
+        .withIndex("by_car", (q: any) => q.eq("carId", carId as any))
+        .collect();
+      for (const booking of bookings) {
+        if (!blockingStatuses.has(String(booking.status))) {
+          continue;
+        }
+        if (booking.endDate < startDate || booking.startDate > endDate) {
+          continue;
+        }
+        blocked.add(carId);
+        break;
+      }
+    }
+    return blocked;
+  }
+
+  const [pending, confirmed, inProgress] = await Promise.all([
     ctx.db
       .query("bookings")
       .withIndex("by_status_startDate", (q: any) =>
@@ -1067,10 +1216,16 @@ async function collectBlockingCarIdsForRange(
         q.eq("status", "confirmed").lte("startDate", endDate),
       )
       .collect(),
+    ctx.db
+      .query("bookings")
+      .withIndex("by_status_startDate", (q: any) =>
+        q.eq("status", "in_progress").lte("startDate", endDate),
+      )
+      .collect(),
   ]);
 
   const blocked = new Set<string>();
-  for (const booking of [...pending, ...confirmed]) {
+  for (const booking of [...pending, ...confirmed, ...inProgress]) {
     if (booking.endDate < startDate) {
       continue;
     }
@@ -1104,59 +1259,103 @@ async function listAvailableCarsForRange(
     typeof options.maxDistanceKm === "number" && Number.isFinite(options.maxDistanceKm)
       ? Math.max(1, options.maxDistanceKm)
       : undefined;
-  const maxCarsScanned = clamp(
+  const maxOffersScanned = clamp(
     Math.round(options.maxCarsScanned ?? ACTIVE_CARS_SCAN_LIMIT_DEFAULT),
     1,
     ACTIVE_CARS_SCAN_LIMIT_MAX,
   );
-  const maxCarsReturned = clamp(
+  const maxOffersReturned = clamp(
     Math.round(options.maxCarsReturned ?? ACTIVE_CARS_RETURN_LIMIT_DEFAULT),
     1,
     ACTIVE_CARS_RETURN_LIMIT_MAX,
   );
 
-  const scannedCars: any[] = await ctx.db
-    .query("cars")
+  const scannedOffers: any[] = await ctx.db
+    .query("car_offers")
     .withIndex("by_active", (q: any) => q.eq("isActive", true))
-    .take(maxCarsScanned);
+    .take(maxOffersScanned);
 
-  const prelim = scannedCars.filter((car: any) => {
-    if (car.availableFrom && startTs < new Date(car.availableFrom).getTime()) {
+  const prelim = scannedOffers.filter((offer: any) => {
+    if (offer.availableFrom && startTs < new Date(offer.availableFrom).getTime()) {
       return false;
     }
-    if (car.availableUntil && endTs > new Date(car.availableUntil).getTime()) {
+    if (offer.availableUntil && endTs > new Date(offer.availableUntil).getTime()) {
       return false;
     }
-    if (!isCarInsideDistanceBound(car, centers, maxDistanceKm)) {
+    if (!isCarInsideDistanceBound(offer, centers, maxDistanceKm)) {
       return false;
     }
     return true;
   });
 
-  const candidateIds = new Set<string>(prelim.map((car: any) => String(car._id)));
+  const candidateIds = new Set<string>(prelim.map((offer: any) => String(offer.carId)));
   const blockedCarIds = await collectBlockingCarIdsForRange(ctx, startDate, endDate, candidateIds);
 
-  return prelim
-    .filter((car: any) => !blockedCarIds.has(String(car._id)))
-    .slice(0, maxCarsReturned);
+  const availableOffers = prelim
+    .filter((offer: any) => !blockedCarIds.has(String(offer.carId)))
+    .slice(0, maxOffersReturned);
+
+  const cars = await Promise.all(
+    availableOffers.map((offer: any) => ctx.db.get(offer.carId)),
+  );
+
+  return availableOffers
+    .map((offer: any, index: number) => {
+      const car = cars[index];
+      if (!car) return null;
+      return {
+        _id: offer._id,
+        offerId: offer._id,
+        carId: car._id,
+        hostId: car.hostId,
+        title: offer.title ?? car.title,
+        make: car.make,
+        model: car.model,
+        year: car.year,
+        pricePerDay: offer.pricePerDay,
+        availableFrom: offer.availableFrom,
+        availableUntil: offer.availableUntil,
+        formattedAddress: offer.formattedAddress ?? car.formattedAddress ?? null,
+        features: car.features ?? [],
+        customFeatures: car.customFeatures ?? [],
+        images: car.images ?? [],
+        isCarVerified: Boolean(car.isCarVerified) || Boolean(offer.isOfferVerified),
+        location: offer.location,
+      };
+    })
+    .filter(Boolean);
 }
 
 async function resolveRecentLocationsForPromotions(
   ctx: any,
   fallbackRecentLocations: PromotionRecentLocation[] | undefined,
 ) {
+  const defaultLocations = POLAND_TOP_10_CITIES.map((city, index) => ({
+    placeId: city.placeId,
+    description: city.description,
+    city: city.city,
+    country: city.country,
+    lat: city.lat,
+    lng: city.lng,
+    searchCount: 1,
+    lastSearchedAt: Date.now() - index,
+  } satisfies PromotionRecentLocation));
+
   const normalizedFallback = normalizeRecentLocations(fallbackRecentLocations ?? []);
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
-    return normalizedFallback;
+    return {
+      recentLocations: normalizedFallback.length > 0 ? normalizedFallback : defaultLocations,
+      usedDefaultCities: normalizedFallback.length === 0,
+    };
   }
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkUserId", identity.subject))
-    .first();
+  const user = await getCurrentUserOrNull(ctx);
   if (!user) {
-    return normalizedFallback;
+    return {
+      recentLocations: normalizedFallback.length > 0 ? normalizedFallback : defaultLocations,
+      usedDefaultCities: normalizedFallback.length === 0,
+    };
   }
 
   const serverRows = await ctx.db
@@ -1177,7 +1376,13 @@ async function resolveRecentLocationsForPromotions(
     })),
   );
 
-  return normalizedServer.length > 0 ? normalizedServer : normalizedFallback;
+  if (normalizedServer.length > 0) {
+    return { recentLocations: normalizedServer, usedDefaultCities: false };
+  }
+  if (normalizedFallback.length > 0) {
+    return { recentLocations: normalizedFallback, usedDefaultCities: false };
+  }
+  return { recentLocations: defaultLocations, usedDefaultCities: true };
 }
 
 async function enrichCarsForPromotionSignals(ctx: any, cars: any[]) {
@@ -1186,7 +1391,7 @@ async function enrichCarsForPromotionSignals(ctx: any, cars: any[]) {
   }
   const nowTs = Date.now();
   const lookbackStartTs = nowTs - RENTAL_LOOKBACK_DAYS * MS_PER_DAY;
-  const carIds = cars.map((car) => String(car._id));
+  const carIds = cars.map((car) => String(car.carId ?? car._id));
   const hostIds = Array.from(new Set(cars.map((car) => String(car.hostId))));
 
   const hosts = await Promise.all(hostIds.map((hostId) => ctx.db.get(hostId as any)));
@@ -1281,7 +1486,8 @@ async function enrichCarsForPromotionSignals(ctx: any, cars: any[]) {
   }
 
   return cars.map((car) => {
-    const carReviewStats = carReviewStatsByCarId.get(String(car._id)) ?? { sum: 0, count: 0 };
+    const sourceCarId = String(car.carId ?? car._id);
+    const carReviewStats = carReviewStatsByCarId.get(sourceCarId) ?? { sum: 0, count: 0 };
     const carReviewCount = carReviewStats.count;
     const carReviewAvg = carReviewCount > 0 ? carReviewStats.sum / carReviewCount : 0;
 
@@ -1292,7 +1498,7 @@ async function enrichCarsForPromotionSignals(ctx: any, cars: any[]) {
     const hostReviewCount = hostReviewStats.count;
     const hostReviewAvg = hostReviewStats.avg;
 
-    const bookingStats = bookingStatsByCarId.get(String(car._id)) ?? {
+    const bookingStats = bookingStatsByCarId.get(sourceCarId) ?? {
       bookingCount180d: 0,
       totalRentalDays180d: 0,
     };
@@ -1450,7 +1656,7 @@ export const listCurrentlyAvailableCarsPaginated = query({
       ),
     );
     const chunk = await ctx.db
-      .query("cars")
+      .query("car_offers")
       .withIndex("by_active", (q: any) => q.eq("isActive", true))
       .paginate({
         ...(args.paginationOpts as any),
@@ -1459,23 +1665,23 @@ export const listCurrentlyAvailableCarsPaginated = query({
         numItems: Math.min(Math.max(requestedItems * 3, 40), 240),
       });
 
-    const prelim = chunk.page.filter((car: any) => {
-      if (car.availableFrom && startTs < new Date(car.availableFrom).getTime()) {
+    const prelim = chunk.page.filter((offer: any) => {
+      if (offer.availableFrom && startTs < new Date(offer.availableFrom).getTime()) {
         return false;
       }
-      if (car.availableUntil && endTs > new Date(car.availableUntil).getTime()) {
+      if (offer.availableUntil && endTs > new Date(offer.availableUntil).getTime()) {
         return false;
       }
 
       if (hasCenter && radiusKm !== null) {
-        if (typeof car.location?.lat !== "number" || typeof car.location?.lng !== "number") {
+        if (typeof offer.location?.lat !== "number" || typeof offer.location?.lng !== "number") {
           return false;
         }
         const distance = haversineKm(
           Number(args.centerLat),
           Number(args.centerLng),
-          car.location.lat,
-          car.location.lng,
+          offer.location.lat,
+          offer.location.lng,
         );
         if (distance > radiusKm) {
           return false;
@@ -1486,11 +1692,37 @@ export const listCurrentlyAvailableCarsPaginated = query({
 
     let filteredPage: any[] = [];
     if (prelim.length > 0) {
-      const candidateIds = new Set(prelim.map((car: any) => String(car._id)));
+      const candidateIds = new Set(prelim.map((offer: any) => String(offer.carId)));
       const blockedIds = await collectBlockingCarIdsForRange(ctx, startDate, endDate, candidateIds);
-      filteredPage = prelim
-        .filter((car: any) => !blockedIds.has(String(car._id)))
+      const availableOffers = prelim
+        .filter((offer: any) => !blockedIds.has(String(offer.carId)))
         .slice(0, requestedItems);
+      const carIds = availableOffers.map((offer: any) => offer.carId);
+      const cars = await Promise.all(carIds.map((carId: any) => ctx.db.get(carId as any)));
+      filteredPage = availableOffers
+        .map((offer: any, index: number) => {
+          const car = cars[index] as any;
+          if (!car) return null;
+          return {
+            _id: offer._id,
+            offerId: offer._id,
+            carId: car._id,
+            title: offer.title ?? car.title,
+            make: car.make,
+            model: car.model,
+            year: car.year,
+            pricePerDay: offer.pricePerDay,
+            availableFrom: offer.availableFrom,
+            availableUntil: offer.availableUntil,
+            formattedAddress: offer.formattedAddress ?? null,
+            features: car.features ?? [],
+            customFeatures: car.customFeatures ?? [],
+            images: car.images ?? [],
+            isCarVerified: Boolean(car.isCarVerified),
+            location: offer.location,
+          };
+        })
+        .filter(Boolean);
     }
 
     return {
@@ -1513,12 +1745,14 @@ export const listPromotionalOffersForRecentLocations = query({
       const startDate = args.startDate ?? new Date().toISOString();
       const endDate = args.endDate ?? startDate;
       const limit = normalizeLimit(args.limit, PROMOTION_LIMIT_DEFAULT);
-      const recentLocations = (
-        await resolveRecentLocationsForPromotions(ctx, args.fallbackRecentLocations)
-      ).slice(0, RECENT_LOCATIONS_FOR_SECTION);
+      const recentResolution = await resolveRecentLocationsForPromotions(
+        ctx,
+        args.fallbackRecentLocations,
+      );
+      const recentLocations = recentResolution.recentLocations.slice(0, RECENT_LOCATIONS_FOR_SECTION);
 
       if (!recentLocations.length) {
-        return { recentLocations: [], offers: [], error: null as string | null };
+        return { recentLocations: [], offers: [], usedDefaultCities: false, error: null as string | null };
       }
 
       const availableCars = await listAvailableCarsForRange(ctx, startDate, endDate, {
@@ -1531,7 +1765,12 @@ export const listPromotionalOffersForRecentLocations = query({
         maxCarsReturned: 180,
       });
       if (!availableCars.length) {
-        return { recentLocations, offers: [], error: null as string | null };
+        return {
+          recentLocations,
+          offers: [],
+          usedDefaultCities: recentResolution.usedDefaultCities,
+          error: null as string | null,
+        };
       }
 
       const cityMedianPrices = buildCityMedianPrices(availableCars);
@@ -1661,12 +1900,14 @@ export const listPromotionalOffersForRecentLocations = query({
       return {
         recentLocations,
         offers: selected.slice(0, limit),
+        usedDefaultCities: recentResolution.usedDefaultCities,
         error: null as string | null,
       };
     } catch {
       return {
         recentLocations: [],
         offers: [],
+        usedDefaultCities: false,
         error: "PROMOTION_QUERY_FAILED",
       };
     }
@@ -1685,10 +1926,11 @@ export const listPromotionalOffersForNearbyBigCity = query({
       const startDate = args.startDate ?? new Date().toISOString();
       const endDate = args.endDate ?? startDate;
       const limit = normalizeLimit(args.limit, PROMOTION_LIMIT_DEFAULT);
-      const recentLocations = await resolveRecentLocationsForPromotions(
+      const recentResolution = await resolveRecentLocationsForPromotions(
         ctx,
         args.fallbackRecentLocations,
       );
+      const recentLocations = recentResolution.recentLocations;
       const anchorLocation = recentLocations[0] ?? null;
 
       if (!anchorLocation) {
@@ -1905,10 +2147,14 @@ export const listPromotionalOffersForNearbyBigCity = query({
 
 export const getCarOfferById = query({
   args: {
-    carId: v.id("cars"),
+    offerId: v.id("car_offers"),
   },
   async handler(ctx, args) {
-    const car = await ctx.db.get(args.carId);
+    const offer = await ctx.db.get(args.offerId);
+    if (!offer) {
+      return null;
+    }
+    const car = await ctx.db.get(offer.carId);
     if (!car) {
       return null;
     }
@@ -1918,15 +2164,17 @@ export const getCarOfferById = query({
 
     return {
       car: {
-        id: String(car._id),
-        title: car.title,
+        id: String(offer._id),
+        offerId: String(offer._id),
+        carId: String(car._id),
+        title: offer.title ?? car.title,
         make: car.make,
         model: car.model,
         year: car.year,
-        pricePerDay: car.pricePerDay,
-        availableFrom: car.availableFrom,
-        availableUntil: car.availableUntil,
-        formattedAddress: car.formattedAddress,
+        pricePerDay: offer.pricePerDay,
+        availableFrom: offer.availableFrom,
+        availableUntil: offer.availableUntil,
+        formattedAddress: offer.formattedAddress ?? null,
         features: car.features ?? [],
         customFeatures: car.customFeatures ?? [],
         kilometersLimitPerDay: car.kilometersLimitPerDay ?? null,
@@ -1937,9 +2185,9 @@ export const getCarOfferById = query({
         collectionInPersonInstructions: car.collectionInPersonInstructions ?? null,
         collectionLockboxInstructions: car.collectionLockboxInstructions ?? null,
         collectionDeliveryInstructions: car.collectionDeliveryInstructions ?? null,
-        isCarVerified: Boolean(car.isCarVerified),
+        isCarVerified: Boolean(car.isCarVerified) || Boolean(offer.isOfferVerified),
         images: car.images ?? [],
-        location: car.location,
+        location: offer.location,
       },
       hostPublic: host
         ? {
@@ -1962,6 +2210,8 @@ export const getCarOfferById = query({
   },
 });
 
+export { migrateCarsToOffersInternal } from "./migrationEntrypoints";
+
 export const listHostCars = query({
   args: {
     status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
@@ -1969,10 +2219,7 @@ export const listHostCars = query({
   async handler(ctx, args) {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkUserId", identity.subject))
-      .first();
+    const user = await getCurrentUserOrNull(ctx);
     if (!user) return [];
     const host = await ctx.db
       .query("hosts")

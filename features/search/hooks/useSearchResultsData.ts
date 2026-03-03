@@ -69,6 +69,8 @@ export function useSearchResultsData({
     () =>
       (results as any[] | undefined)?.map((car: any) => ({
         id: car._id,
+        offerId: car.offerId ? String(car.offerId) : String(car._id),
+        carId: car.carId ? String(car.carId) : undefined,
         title: car.title,
         make: car.make,
         model: car.model,

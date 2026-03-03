@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 import { useQuery } from "convex/react";
 
 import { profileApi } from "@/features/profile/api";
@@ -12,7 +12,7 @@ export type ReviewEntry = {
 
 export function useProfileReviewsScreenState() {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAppAuth();
   const [activeTab, setActiveTab] = useState<"renter" | "host">("renter");
   const convexUser = useQuery(profileApi.getCurrentUser);
   const renterVerification = useQuery(profileApi.getMyRenterVerificationStatus, isSignedIn ? {} : "skip") as
@@ -81,3 +81,4 @@ export function useProfileReviewsScreenState() {
 }
 
 export type ProfileReviewsScreenController = ReturnType<typeof useProfileReviewsScreenState>;
+

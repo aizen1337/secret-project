@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 import { useTranslation } from "react-i18next";
 
 import { useToast } from "@/components/feedback/useToast";
@@ -21,7 +21,7 @@ export function useTripsScreenState() {
   const checkoutParam = normalizeParam(params.checkout);
   const checkoutSessionIdParam = normalizeParam(params.session_id);
   const toast = useToast();
-  const { isSignedIn } = useAuth();
+  const { isSignedIn } = useAppAuth();
   const trips = useQuery(bookingsApi.listMyTripsWithPayments, isSignedIn ? {} : "skip");
   const cancelReservation = useMutation(bookingsApi.cancelReservation) as any;
   const createReservationPayNowSession = useAction(bookingsApi.createReservationPayNowSession) as any;
@@ -50,3 +50,4 @@ export function useTripsScreenState() {
 }
 
 export type TripsScreenController = ReturnType<typeof useTripsScreenState>;
+

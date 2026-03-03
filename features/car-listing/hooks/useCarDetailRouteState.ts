@@ -20,7 +20,7 @@ type CarDetailParams = {
 
 export function useCarDetailRouteState() {
   const params = useLocalSearchParams<CarDetailParams>();
-  const carId = typeof params.id === "string" ? (params.id as Id<"cars">) : undefined;
+  const offerId = typeof params.id === "string" ? (params.id as Id<"car_offers">) : undefined;
   const today = useMemo(() => new Date(), []);
   const defaultEnd = useMemo(() => {
     const value = new Date(today);
@@ -42,7 +42,7 @@ export function useCarDetailRouteState() {
   );
 
   return {
-    carId,
+    offerId,
     selectedStartDate,
     selectedEndDate,
     selectedStartHour,

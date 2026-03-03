@@ -16,13 +16,34 @@ export function normalizeCollectionMethods(
   return deduped.length > 0 ? deduped : ["in_person"];
 }
 
+export function parseCollectionMethods(
+  methods: ReadonlyArray<string> | null | undefined,
+): CollectionMethod[] {
+  if (!Array.isArray(methods) || methods.length === 0) {
+    return ["in_person"];
+  }
+
+  const invalidMethod = methods.find((method) => !isCollectionMethod(method));
+  if (invalidMethod) {
+    throw new Error(`INVALID_INPUT: Unsupported collection method "${invalidMethod}".`);
+  }
+
+  return Array.from(new Set(methods));
+}
+
 export function resolveSelectedCollectionMethod(args: {
   requested?: string | null;
   available?: ReadonlyArray<string> | null;
 }): CollectionMethod {
   const available = normalizeCollectionMethods(args.available);
-  if (args.requested && isCollectionMethod(args.requested) && available.includes(args.requested)) {
-    return args.requested;
+  if (!args.requested) {
+    return available[0] ?? "in_person";
   }
-  return available[0] ?? "in_person";
+  if (!isCollectionMethod(args.requested)) {
+    throw new Error(`INVALID_INPUT: Unsupported collection method "${String(args.requested)}".`);
+  }
+  if (!available.includes(args.requested)) {
+    throw new Error("INVALID_INPUT: Selected collection method is unavailable for this listing.");
+  }
+  return args.requested;
 }

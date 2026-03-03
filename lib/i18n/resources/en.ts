@@ -446,6 +446,12 @@ export const en = {
     locationSelectSuggestion: 'Select a location from the suggestions.',
     locationNotFound: 'Location not found.',
     locationSearchFailed: 'Location search failed.',
+    cityWidgetsTitle: 'Top destinations',
+    cityWidgetsSubtitle: '10 biggest cities',
+    locationModalTitle: 'Choose destination',
+    locationModalTopCity: 'Top city',
+    locationModalTopCities: 'Top 10 cities',
+    locationModalSuggestions: 'Autocomplete results',
     makePlaceholder: 'Car make (e.g., BMW)',
     modelPlaceholder: 'Car model (e.g., M3)',
     promotions: {

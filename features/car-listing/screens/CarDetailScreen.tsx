@@ -20,7 +20,7 @@ export default function CarDetailScreen() {
   const mode = resolveThemeMode(useColorScheme());
   const state = useCarDetailScreenState();
 
-  if (!state.carId) {
+  if (!state.offerId) {
     return <CenterMessage message={t("carDetail.notFound")} />;
   }
 

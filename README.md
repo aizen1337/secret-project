@@ -37,6 +37,45 @@ Cross-platform Expo + Convex marketplace app with strict feature-slice frontend 
 - `npm run web`
 - `npm run stripe:webhook:setup`
 - `npm run stripe:reconcile-stale-checkout`
+- `npm run local:convex:up`
+- `npm run local:convex:down`
+- `npm run local:convex:logs`
+- `npm run local:convex:health`
+- `npm run local:convex:codegen`
+- `npm run local:convex:push`
+- `npm run local:env:selfhost`
+- `npm run local:env:cloud`
+- `npm run local:loadtest:seed`
+- `npm run local:loadtest:smoke`
+- `npm run local:loadtest:race`
+- `npm run local:loadtest:full`
+- `npm run local:loadtest:reset`
+- `npm run local:seed:marketplace`
+- `npm run local:seed:absurd-listings`
+- `npm run local:seed:reset`
+
+## Self-Hosted Convex (Local)
+
+- Stack config: `infra/convex-selfhost/`
+- Bring-up guide: `infra/convex-selfhost/README.md`
+- Load/race harness: `tests/load/README.md`
+
+### Quick start
+
+1. `Copy-Item infra/convex-selfhost/.env.example infra/convex-selfhost/.env`
+2. `npm run local:convex:up`
+3. Generate admin key:
+   - `docker compose -f infra/convex-selfhost/docker-compose.yml --env-file infra/convex-selfhost/.env exec backend ./generate_admin_key.sh`
+4. Put key in `.env.local.selfhost.example`, then `npm run local:env:selfhost`
+5. `npm run local:convex:health`
+6. `npm run local:loadtest:seed`
+7. `npm run local:loadtest:full`
+
+### Local dataset seeding (script-based)
+
+- `npm run local:seed:marketplace` seeds users/hosts/cars/bookings/payments/chats/messages/reviews/deposit cases.
+- `npm run local:seed:absurd-listings` seeds a large car-heavy dataset for listing/search tests.
+- `npm run local:seed:reset` deletes `[LT]`-tagged seeded data from related tables.
 
 ## Conventions
 

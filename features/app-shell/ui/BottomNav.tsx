@@ -4,7 +4,7 @@ import { Link, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { Text } from "@/components/ui/text";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "convex/react";
@@ -33,7 +33,7 @@ const signedInItems: NavItem[] = [
 export function BottomNav(_: Partial<BottomTabBarProps> = {}) {
   const { t } = useTranslation();
   const pathname = usePathname();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAppAuth();
   const mode = resolveThemeMode(useColorScheme());
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -104,4 +104,5 @@ export function BottomNav(_: Partial<BottomTabBarProps> = {}) {
     </View>
   );
 }
+
 

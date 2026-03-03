@@ -1,8 +1,6 @@
-import { ClerkProvider, useAuth } from '@clerk/clerk-expo'
-import { tokenCache } from '@clerk/clerk-expo/token-cache'
 import { PortalHost } from '@rn-primitives/portal'
 import { ConvexReactClient } from 'convex/react'
-import { ConvexProviderWithClerk } from 'convex/react-clerk'
+import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react'
 import { Stack } from 'expo-router'
 import { useColorScheme, vars } from 'nativewind'
 import { useEffect, useMemo, useState } from 'react'
@@ -15,6 +13,7 @@ import {
   getStoredThemePreferenceAsync,
 } from '@/lib/themePreference'
 import { getThemeCssVariables, resolveThemeMode } from '@/lib/themeTokens'
+import { authClient } from '@/lib/auth/authClient'
 import '../global.css'
 
 if (!process.env.EXPO_PUBLIC_CONVEX_URL) {
@@ -48,19 +47,17 @@ export default function RootLayout() {
   if (!isI18nReady) return null
 
   return (
-    <ClerkProvider tokenCache={tokenCache}>
-      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-        <ToastProvider>
-          <SafeAreaView
-            className="flex-1 bg-background"
-            style={themeVars}
-            edges={['top', 'left', 'right']}
-          >
-            <Stack screenOptions={{ headerShown: false }} />
-            <PortalHost />
-          </SafeAreaView>
-        </ToastProvider>
-      </ConvexProviderWithClerk>
-    </ClerkProvider>
+    <ConvexBetterAuthProvider client={convex} authClient={authClient}>
+      <ToastProvider>
+        <SafeAreaView
+          className="flex-1 bg-background"
+          style={themeVars}
+          edges={['top', 'left', 'right']}
+        >
+          <Stack screenOptions={{ headerShown: false }} />
+          <PortalHost />
+        </SafeAreaView>
+      </ToastProvider>
+    </ConvexBetterAuthProvider>
   )
 }

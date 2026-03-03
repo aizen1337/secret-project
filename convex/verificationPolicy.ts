@@ -1,11 +1,22 @@
 export type VerificationStatus = "unverified" | "pending" | "verified" | "rejected";
 export type VerificationCheckType = "identity" | "driver_license";
 export type VerificationSubjectType = "renter";
-export type VerificationProvider = "stripe";
+export type VerificationProvider = "stripe" | "poland_local";
 export type VerificationReasonCode =
   | "VERIFICATION_PENDING"
   | "VERIFICATION_REJECTED"
   | "UNVERIFIED_RENTER";
+
+export function resolveDefaultVerificationProvider(
+  configuredValue = process.env.VERIFICATION_PROVIDER_DEFAULT,
+): VerificationProvider {
+  const normalized = String(configuredValue ?? "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "stripe") return "stripe";
+  if (normalized === "poland_local") return "poland_local";
+  return "poland_local";
+}
 
 export const requiredRenterChecks: VerificationCheckType[] = ["driver_license"];
 

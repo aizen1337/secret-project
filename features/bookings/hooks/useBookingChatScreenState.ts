@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 import { useMutation } from "convex/react";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,7 +20,7 @@ export function useBookingChatScreenState() {
   const router = useRouter();
   const toast = useToast();
   const insets = useSafeAreaInsets();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAppAuth();
   const params = useLocalSearchParams<BookingChatParams>();
   const bookingIdParam = normalizeParam(params.bookingId);
   const sendBookingMessage = useMutation(bookingsApi.bookingChat.sendBookingMessage) as any;
@@ -58,3 +58,4 @@ export function useBookingChatScreenState() {
 }
 
 export type BookingChatScreenController = ReturnType<typeof useBookingChatScreenState>;
+

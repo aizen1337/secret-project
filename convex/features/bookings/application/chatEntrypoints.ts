@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "../../../_generated/server";
-import { mapClerkUser } from "../../../userMapper";
+import { getCurrentUserOrNull, mapClerkUser } from "../../../userMapper";
 import type { Id } from "../../../_generated/dataModel";
 
 const MAX_TEXT_LENGTH = 1200;
@@ -74,13 +74,7 @@ function clampThreadLimit(limit?: number) {
 }
 
 async function getCurrentSignedInUserOrNull(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) return null;
-
-  return await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkUserId", identity.subject))
-    .first();
+  return await getCurrentUserOrNull(ctx);
 }
 
 async function resolveBookingParticipantAccess(ctx: any, bookingId: any, viewerUserId: any) {

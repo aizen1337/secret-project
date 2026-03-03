@@ -94,6 +94,18 @@ function appendCheckoutLineItem(body: URLSearchParams, index: number, amount: nu
   body.set(`line_items[${index}][quantity]`, "1");
 }
 
+function resolvePaymentStrategyForHost(host: any): PaymentStrategy {
+  if (
+    host?.stripeConnectAccountId &&
+    host?.stripeOnboardingComplete &&
+    host?.stripeChargesEnabled &&
+    host?.stripePayoutsEnabled
+  ) {
+    return "destination_manual_capture";
+  }
+  return "platform_transfer_fallback";
+}
+
 function buildPaymentSessionBody(args: {
   successUrl: string;
   cancelUrl: string;
@@ -106,6 +118,8 @@ function buildPaymentSessionBody(args: {
   paymentId: string;
   bookingId: string;
   paymentPurpose: "initial_immediate_payment" | "manual_pay_now";
+  paymentStrategy: PaymentStrategy;
+  hostStripeConnectAccountId?: string | null;
 }) {
   const body = new URLSearchParams({
     mode: "payment",
@@ -125,6 +139,18 @@ function buildPaymentSessionBody(args: {
   body.set("payment_intent_data[metadata][paymentId]", args.paymentId);
   body.set("payment_intent_data[metadata][bookingId]", args.bookingId);
   body.set("payment_intent_data[metadata][paymentPurpose]", args.paymentPurpose);
+
+  if (
+    args.paymentStrategy === "destination_manual_capture" &&
+    args.hostStripeConnectAccountId
+  ) {
+    body.set("payment_intent_data[capture_method]", "manual");
+    body.set(
+      "payment_intent_data[application_fee_amount]",
+      String(Math.round(args.serviceFee * 100)),
+    );
+    body.set("payment_intent_data[transfer_data][destination]", args.hostStripeConnectAccountId);
+  }
   return body;
 }
 
@@ -221,7 +247,7 @@ function shouldFallbackByPaymentId(
 
 export const createCheckoutSession = action({
   args: {
-    carId: v.id("cars"),
+    offerId: v.id("car_offers"),
     successUrl: v.string(),
     cancelUrl: v.string(),
     startDate: v.string(),
@@ -245,7 +271,7 @@ export const createCheckoutSession = action({
     const cancelUrl = assertAllowedRedirectUrl(args.cancelUrl, "cancelUrl");
 
     const pending = await ctx.runMutation(internalApi.stripe.createPendingBookingPaymentInternal, {
-      carId: args.carId,
+      offerId: args.offerId,
       startDate: args.startDate,
       endDate: args.endDate,
       currency: "usd",
@@ -258,6 +284,26 @@ export const createCheckoutSession = action({
       existingStripeCustomerId: pending.renterStripeCustomerId ?? null,
       clerkUserId: identity.subject,
     });
+    const effectiveStrategy: PaymentStrategy =
+      pending.paymentStrategy === "destination_manual_capture" &&
+      !pending.hostStripeConnectAccountId
+        ? "platform_transfer_fallback"
+        : pending.paymentStrategy;
+
+    if (
+      pending.paymentStrategy === "destination_manual_capture" &&
+      !pending.hostStripeConnectAccountId
+    ) {
+      console.warn(
+        JSON.stringify({
+          source: "stripe.checkout.create",
+          event: "demote_destination_to_fallback_missing_connect_id",
+          paymentId: String(pending.paymentId),
+          bookingId: String(pending.bookingId),
+          hostId: String(pending.hostId),
+        }),
+      );
+    }
 
     let payload: any;
     if (pending.requiresImmediatePayment) {
@@ -273,6 +319,8 @@ export const createCheckoutSession = action({
         paymentId: String(pending.paymentId),
         bookingId: String(pending.bookingId),
         paymentPurpose: "initial_immediate_payment",
+        paymentStrategy: effectiveStrategy,
+        hostStripeConnectAccountId: pending.hostStripeConnectAccountId ?? null,
       });
       payload = await stripeFormRequest(
         "checkout/sessions",
@@ -303,6 +351,19 @@ export const createCheckoutSession = action({
       bookingId: pending.bookingId,
       stripeCheckoutSessionId: payload.id as string,
     });
+
+    console.log(
+      JSON.stringify({
+        source: "stripe.checkout.create",
+        paymentId: String(pending.paymentId),
+        bookingId: String(pending.bookingId),
+        hostId: String(pending.hostId),
+        paymentStrategy: effectiveStrategy,
+        hostConnectIdPresent: Boolean(pending.hostStripeConnectAccountId),
+        captureMethod: effectiveStrategy === "destination_manual_capture" ? "manual" : "automatic",
+        checkoutMode: pending.requiresImmediatePayment ? "payment" : "setup",
+      }),
+    );
 
     return {
       url: payload.url as string,
@@ -344,6 +405,26 @@ export const createReservationPayNowSession = action({
       existingStripeCustomerId: prepared.stripeCustomerId ?? null,
       clerkUserId: identity.subject,
     });
+    const effectiveStrategy: PaymentStrategy =
+      prepared.paymentStrategy === "destination_manual_capture" &&
+      !prepared.hostStripeConnectAccountId
+        ? "platform_transfer_fallback"
+        : prepared.paymentStrategy;
+
+    if (
+      prepared.paymentStrategy === "destination_manual_capture" &&
+      !prepared.hostStripeConnectAccountId
+    ) {
+      console.warn(
+        JSON.stringify({
+          source: "stripe.checkout.pay_now",
+          event: "demote_destination_to_fallback_missing_connect_id",
+          paymentId: String(prepared.paymentId),
+          bookingId: String(prepared.bookingId),
+          hostId: String(prepared.hostId),
+        }),
+      );
+    }
 
     const body = buildPaymentSessionBody({
       successUrl,
@@ -357,6 +438,8 @@ export const createReservationPayNowSession = action({
       paymentId: String(prepared.paymentId),
       bookingId: String(prepared.bookingId),
       paymentPurpose: "manual_pay_now",
+      paymentStrategy: effectiveStrategy,
+      hostStripeConnectAccountId: prepared.hostStripeConnectAccountId ?? null,
     });
     const payload = await stripeFormRequest(
       "checkout/sessions",
@@ -368,6 +451,18 @@ export const createReservationPayNowSession = action({
       bookingId: prepared.bookingId,
       stripeCheckoutSessionId: payload.id as string,
     });
+
+    console.log(
+      JSON.stringify({
+        source: "stripe.checkout.pay_now",
+        paymentId: String(prepared.paymentId),
+        bookingId: String(prepared.bookingId),
+        hostId: String(prepared.hostId),
+        paymentStrategy: effectiveStrategy,
+        hostConnectIdPresent: Boolean(prepared.hostStripeConnectAccountId),
+        captureMethod: effectiveStrategy === "destination_manual_capture" ? "manual" : "automatic",
+      }),
+    );
 
     return {
       url: payload.url as string,
@@ -533,7 +628,7 @@ export const reconcileCheckoutSessionFromRedirect = action({
 
 export const createPendingBookingPaymentInternal = internalMutation({
   args: {
-    carId: v.id("cars"),
+    offerId: v.id("car_offers"),
     startDate: v.string(),
     endDate: v.string(),
     currency: v.optional(v.string()),
@@ -543,8 +638,12 @@ export const createPendingBookingPaymentInternal = internalMutation({
   },
   async handler(ctx, args) {
     const user = await mapClerkUser(ctx);
-    const car = await ctx.db.get(args.carId);
-    if (!car || !car.isActive) {
+    const offer = await ctx.db.get(args.offerId);
+    if (!offer || !offer.isActive) {
+      throw new Error("NOT_FOUND: Offer not available.");
+    }
+    const car = await ctx.db.get(offer.carId);
+    if (!car) {
       throw new Error("NOT_FOUND: Car not available.");
     }
 
@@ -552,11 +651,23 @@ export const createPendingBookingPaymentInternal = internalMutation({
     const endTs = toTimestamp(args.endDate, "endDate");
     const days = calculateDaysInclusive(startTs, endTs);
 
-    if (car.availableFrom && startTs < new Date(car.availableFrom).getTime()) {
+    if (offer.availableFrom && startTs < new Date(offer.availableFrom).getTime()) {
       throw new Error("INVALID_INPUT: Selected period is before car availability.");
     }
-    if (car.availableUntil && endTs > new Date(car.availableUntil).getTime()) {
+    if (offer.availableUntil && endTs > new Date(offer.availableUntil).getTime()) {
       throw new Error("INVALID_INPUT: Selected period is after car availability.");
+    }
+    const ranges = await ctx.db
+      .query("offer_availability_ranges")
+      .withIndex("by_offer", (q: any) => q.eq("offerId", offer._id))
+      .collect();
+    const withinAnyRange = ranges.some((range: any) => {
+      const rangeStart = new Date(range.startDate).getTime();
+      const rangeEnd = new Date(range.endDate).getTime();
+      return startTs >= rangeStart && endTs <= rangeEnd;
+    });
+    if (ranges.length > 0 && !withinAnyRange) {
+      throw new Error("INVALID_INPUT: Selected period is outside offer availability ranges.");
     }
 
     const existingForCar = await ctx.db
@@ -578,9 +689,7 @@ export const createPendingBookingPaymentInternal = internalMutation({
     if (String(host.userId) === String(user._id)) {
       throw new Error("UNAUTHORIZED: You cannot book your own listing.");
     }
-    if (!host.stripeConnectAccountId || !host.stripeOnboardingComplete || !host.stripePayoutsEnabled) {
-      throw new Error("UNAVAILABLE: Host has not completed payout onboarding yet.");
-    }
+    const paymentStrategy = resolvePaymentStrategyForHost(host);
 
     const collectionMethod = resolveSelectedCollectionMethod({
       requested: args.collectionMethod,
@@ -593,7 +702,7 @@ export const createPendingBookingPaymentInternal = internalMutation({
       throw new Error("INVALID_INPUT: Selected host delivery is unavailable for this listing.");
     }
 
-    const rentalAmount = car.pricePerDay * days;
+    const rentalAmount = offer.pricePerDay * days;
     const platformFeeAmount = Math.round(rentalAmount * 0.1);
     const hostAmount = rentalAmount - platformFeeAmount;
     const depositAmount = Number(car.depositAmount ?? 0);
@@ -604,6 +713,7 @@ export const createPendingBookingPaymentInternal = internalMutation({
 
     const bookingId = await ctx.db.insert("bookings", {
       carId: car._id,
+      offerId: offer._id,
       renterId: user._id,
       startDate: args.startDate,
       endDate: args.endDate,
@@ -632,8 +742,8 @@ export const createPendingBookingPaymentInternal = internalMutation({
       stripeCheckoutSessionId: "",
       stripeCustomerId: user.stripeCustomerId,
       currency: args.currency ?? "usd",
-      paymentStrategy: "platform_transfer_fallback",
-      captureStatus: "not_required",
+      paymentStrategy,
+      captureStatus: paymentStrategy === "destination_manual_capture" ? "pending_capture" : "not_required",
       rentalAmount,
       platformFeeAmount,
       hostAmount,
@@ -660,10 +770,12 @@ export const createPendingBookingPaymentInternal = internalMutation({
       renterId: user._id,
       renterStripeCustomerId: user.stripeCustomerId ?? null,
       days,
-      carName: car.title || `${car.make} ${car.model}`,
+      carName: offer.title || car.title || `${car.make} ${car.model}`,
       rentalAmount,
       platformFeeAmount,
       hostAmount,
+      paymentStrategy,
+      hostStripeConnectAccountId: host.stripeConnectAccountId ?? null,
       depositAmount,
       totalAmount: rentalAmount + platformFeeAmount + depositAmount,
       paymentDueAt,
@@ -721,6 +833,7 @@ export const prepareReservationPayNowInternal = internalMutation({
       throw new Error("INVALID_INPUT: Payment deadline has passed.");
     }
     const car = await ctx.db.get(payment.carId);
+    const host = await ctx.db.get(payment.hostId);
     const now = Date.now();
     await ctx.db.patch(payment._id, {
       updatedAt: now,
@@ -737,8 +850,11 @@ export const prepareReservationPayNowInternal = internalMutation({
       bookingId: booking._id,
       paymentId: payment._id,
       renterId: payment.renterId,
+      hostId: payment.hostId,
       stripeCustomerId: payment.stripeCustomerId ?? user.stripeCustomerId ?? null,
       paymentDueAt: payment.paymentDueAt ?? null,
+      paymentStrategy: (payment.paymentStrategy ?? "platform_transfer_fallback") as PaymentStrategy,
+      hostStripeConnectAccountId: host?.stripeConnectAccountId ?? null,
       rentalAmount: payment.rentalAmount,
       platformFeeAmount: payment.platformFeeAmount,
       depositAmount: Number(payment.depositAmount ?? 0),

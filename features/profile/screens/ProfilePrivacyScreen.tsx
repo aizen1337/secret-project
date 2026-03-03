@@ -4,7 +4,7 @@ import { ScrollView, View, Text, Pressable } from "react-native";
 import { useColorScheme } from "nativewind";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 import { useTranslation } from "react-i18next";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -15,7 +15,7 @@ export default function ProfilePrivacyScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const mode = resolveThemeMode(useColorScheme());
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAppAuth();
 
   if (!isLoaded) {
     return (
@@ -57,4 +57,5 @@ export default function ProfilePrivacyScreen() {
     </SafeAreaView>
   );
 }
+
 

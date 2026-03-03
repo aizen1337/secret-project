@@ -2,7 +2,7 @@ import { FlatList, Image, Pressable, Text, View } from "react-native";
 import { useColorScheme } from "nativewind";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useAuth } from "@clerk/clerk-expo";
+import { useAppAuth } from "@/features/auth/hooks/useAppAuth";
 import { useQuery } from "convex/react";
 import { useTranslation } from "react-i18next";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,7 +15,7 @@ export default function ChatsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const mode = resolveThemeMode(useColorScheme());
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAppAuth();
 
   const unreadTotal = useQuery(
     bookingsApi.bookingChat.getMyBookingChatUnreadTotal,
@@ -162,3 +162,4 @@ export default function ChatsScreen() {
     </SafeAreaView>
   );
 }
+

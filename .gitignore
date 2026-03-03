@@ -41,3 +41,7 @@ app-example
 # generated native folders
 /ios
 /android
+
+# local self-hosted convex / load artifacts
+infra/convex-selfhost/.env
+artifacts/loadtest/

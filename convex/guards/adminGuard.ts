@@ -69,12 +69,10 @@ export async function assertAdminFromClerkRoleClaim(ctx: any) {
   if (!identity) {
     throw new Error("UNAUTHORIZED: Authentication required.");
   }
-
-  const expectedRole = normalizeRole(process.env.CLERK_ADMIN_ROLE ?? DEFAULT_ADMIN_ROLE);
+  const expectedRole = normalizeRole(process.env.AUTH_ADMIN_ROLE ?? DEFAULT_ADMIN_ROLE);
   const roles = extractRoles(identity as UnknownRecord);
   if (!roles.has(expectedRole)) {
-    throw new Error("FORBIDDEN: Admin role required.");
+    throw new Error("FORBIDDEN: Admin operations are disabled in app runtime.");
   }
-
   return identity;
 }
