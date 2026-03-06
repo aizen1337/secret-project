@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SearchMap } from "@/features/map/SearchMap";
 import type { BookingDetailsScreenController } from "@/features/bookings/hooks/useBookingDetailsScreenState";
+import { EmbeddedPaymentModal } from "@/features/payments/ui/EmbeddedPaymentModal";
 import { getTokenColor } from "@/lib/themeTokens";
 
 function formatCurrency(amount: number | undefined, currency: string | undefined) {
@@ -411,6 +412,17 @@ export function BookingDetailsContent({ state, mode }: BookingDetailsContentProp
           )}
         </View>
       </ScrollView>
+      <EmbeddedPaymentModal
+        open={state.webPaymentOpen}
+        clientSecret={state.webPaymentClientSecret}
+        onClose={state.handleCloseWebPayment}
+        onSuccess={(paymentIntentId) => {
+          void state.handleEmbeddedPaymentSuccess(paymentIntentId);
+        }}
+        onError={(message) => {
+          state.handleEmbeddedPaymentError(message);
+        }}
+      />
     </SafeAreaView>
   );
 }

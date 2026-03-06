@@ -189,6 +189,13 @@ export const pl = {
     avgPriceDay: 'Srednia cena/dzien',
     myListings: 'Moje oferty',
     bookings: 'Rezerwacje',
+    hostPanel: {
+      title: 'Panel gospodarza',
+      offersListings: 'Oferty i ogloszenia',
+      companyDetails: 'Dane firmy',
+      offersListingsDescription: 'Zarzadzaj ofertami, ogloszeniami i obsluga rezerwacji',
+      companyDetailsDescription: 'Skonfiguruj weryfikacje i dane firmy do wyplat',
+    },
     noPayoutRecords: 'Brak historii wyplat.',
     bookingStatus: 'Status rezerwacji: {{status}}',
     payment: 'Platnosc: {{status}}',
@@ -707,6 +714,7 @@ export const pl = {
     UNVERIFIED_RENTER: 'Ukoncz weryfikacje prawa jazdy przed rezerwacja.',
     VERIFICATION_PENDING: 'Weryfikacja jest w toku. Poczekaj na zakonczenie.',
     VERIFICATION_REJECTED: 'Weryfikacja zostala odrzucona. Sprobuj ponownie w profilu.',
+    HOST_PAYOUTS_NOT_READY: 'Wyplaty gospodarza nie sa jeszcze gotowe. Wybierz inna oferte lub sprobuj pozniej.',
     default: 'Cos poszlo nie tak. Sprobuj ponownie.',
   },
 } as const;

@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "@/features/app-shell/ui/BottomNav";
 import type { CarDetailScreenController } from "@/features/car-listing/hooks/useCarDetailScreenState";
+import { EmbeddedPaymentModal } from "@/features/payments/ui/EmbeddedPaymentModal";
 import { DateRangePicker } from "@/features/shared-date-range/ui/DateRangePicker";
 import { getTokenColor } from "@/lib/themeTokens";
 
@@ -348,6 +349,17 @@ export function CarDetailContent({ state, mode }: CarDetailContentProps) {
           </Text>
         </Pressable>
       </View>
+      <EmbeddedPaymentModal
+        open={state.webPaymentOpen}
+        clientSecret={state.webPaymentClientSecret}
+        onClose={state.handleCloseWebPayment}
+        onSuccess={(paymentIntentId) => {
+          void state.handleEmbeddedPaymentSuccess(paymentIntentId);
+        }}
+        onError={(message) => {
+          state.handleEmbeddedPaymentError(message);
+        }}
+      />
       <BottomNav />
     </SafeAreaView>
   );

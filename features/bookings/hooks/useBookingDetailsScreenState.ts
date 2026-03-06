@@ -33,6 +33,8 @@ export function useBookingDetailsScreenState() {
   const cancelReservation = useMutation(bookingsApi.cancelReservation) as any;
   const createBookingReview = useMutation(bookingsApi.createBookingReview) as any;
   const createReservationPayNowSession = useAction(bookingsApi.createReservationPayNowSession) as any;
+  const createEmbeddedPayNowIntent = useAction(bookingsApi.createEmbeddedPayNowIntent) as any;
+  const confirmEmbeddedPaymentServerSync = useAction(bookingsApi.confirmEmbeddedPaymentServerSync) as any;
   const retryHostPayoutTransfer = useAction(bookingsApi.retryHostPayoutTransfer) as any;
 
   const actions = useBookingDetailsActions({
@@ -45,6 +47,8 @@ export function useBookingDetailsScreenState() {
     cancelReservation,
     createBookingReview,
     createReservationPayNowSession,
+    createEmbeddedPayNowIntent,
+    confirmEmbeddedPaymentServerSync,
     retryHostPayoutTransfer,
   });
   const derived = useBookingDetailsDerived({ details, t, isTablet, isDesktop });

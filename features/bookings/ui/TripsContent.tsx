@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { statusBadgeClasses } from "@/features/bookings/helpers/statusPresentation";
 import type { TripsScreenController } from "@/features/bookings/hooks/useTripsScreenState";
+import { EmbeddedPaymentModal } from "@/features/payments/ui/EmbeddedPaymentModal";
 import { getTokenColor } from "@/lib/themeTokens";
 
 type TripsContentProps = {
@@ -149,6 +150,17 @@ export function TripsContent({ state, mode }: TripsContentProps) {
           renderItem={renderTripItem}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24, alignItems: "center" }}
+        />
+        <EmbeddedPaymentModal
+          open={state.webPaymentOpen}
+          clientSecret={state.webPaymentClientSecret}
+          onClose={state.handleCloseWebPayment}
+          onSuccess={(paymentIntentId) => {
+            void state.handleEmbeddedPaymentSuccess(paymentIntentId);
+          }}
+          onError={(message) => {
+            state.handleEmbeddedPaymentError(message);
+          }}
         />
       </SafeAreaView>
     );

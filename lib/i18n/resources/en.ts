@@ -189,6 +189,13 @@ export const en = {
     avgPriceDay: 'Avg Price/Day',
     myListings: 'My Listings',
     bookings: 'Bookings',
+    hostPanel: {
+      title: 'Host Panel',
+      offersListings: 'Offers & Listings',
+      companyDetails: 'Company Details',
+      offersListingsDescription: 'Manage offers, listings and booking operations',
+      companyDetailsDescription: 'Configure verification and payout company details',
+    },
     noPayoutRecords: 'No payout records yet.',
     bookingStatus: 'Booking status: {{status}}',
     payment: 'Payment: {{status}}',
@@ -707,6 +714,7 @@ export const en = {
     UNVERIFIED_RENTER: "Complete driver's license verification before booking.",
     VERIFICATION_PENDING: 'Verification is still pending. Please wait for completion.',
     VERIFICATION_REJECTED: 'Verification was rejected. Please retry in your profile.',
+    HOST_PAYOUTS_NOT_READY: 'Host payouts are not ready yet. Choose another listing or try later.',
     default: 'Something went wrong. Please try again.',
   },
 } as const;

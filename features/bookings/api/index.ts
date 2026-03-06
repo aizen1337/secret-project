@@ -7,6 +7,8 @@ export const bookingsApi = {
   cancelReservation: api.bookings.cancelReservation,
   retryHostPayoutTransfer: api.bookings.retryHostPayoutTransfer,
   createReservationPayNowSession: api.stripe.createReservationPayNowSession,
+  createEmbeddedPayNowIntent: (api as any).stripe.createEmbeddedPayNowIntent,
+  confirmEmbeddedPaymentServerSync: (api as any).stripe.confirmEmbeddedPaymentServerSync,
   reconcileCheckoutSessionFromRedirect: api.stripe.reconcileCheckoutSessionFromRedirect,
   createBookingReview: api.bookingReviews.createBookingReview,
   bookingChat: {

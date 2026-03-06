@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import * as ExpoLinking from "expo-linking";
 import type { TFunction } from "i18next";
 import { toReadableFallback } from "@/features/bookings/helpers/statusPresentation";
+import { useStripePaymentSheet } from "@/features/payments/hooks/useStripePaymentSheet";
 import { toLocalizedErrorMessage } from "@/lib/errors";
 type UseBookingDetailsActionsParams = {
   t: TFunction;
@@ -17,6 +18,13 @@ type UseBookingDetailsActionsParams = {
     successUrl: string;
     cancelUrl: string;
   }) => Promise<{ url: string }>;
+  createEmbeddedPayNowIntent: (args: {
+    bookingId: any;
+  }) => Promise<{ paymentId: string; paymentIntentClientSecret: string }>;
+  confirmEmbeddedPaymentServerSync: (args: {
+    paymentId: string;
+    stripePaymentIntentId?: string;
+  }) => Promise<unknown>;
   retryHostPayoutTransfer: (args: { bookingId: any }) => Promise<{ released?: boolean; reason?: string }>;
 };
 
@@ -30,13 +38,20 @@ export function useBookingDetailsActions({
   cancelReservation,
   createBookingReview,
   createReservationPayNowSession,
+  createEmbeddedPayNowIntent,
+  confirmEmbeddedPaymentServerSync,
   retryHostPayoutTransfer,
 }: UseBookingDetailsActionsParams) {
+  const { initPaymentSheet, presentPaymentSheet } = useStripePaymentSheet();
   const [pendingPayNow, setPendingPayNow] = useState(false);
   const [pendingCollectionConfirm, setPendingCollectionConfirm] = useState(false);
   const [pendingCancel, setPendingCancel] = useState(false);
   const [pendingPayoutRetry, setPendingPayoutRetry] = useState(false);
   const [pendingReview, setPendingReview] = useState(false);
+  const [webPaymentOpen, setWebPaymentOpen] = useState(false);
+  const [webPaymentClientSecret, setWebPaymentClientSecret] = useState<string | null>(null);
+  const [webPaymentId, setWebPaymentId] = useState<string | null>(null);
+  const embeddedPaymentsEnabled = process.env.EXPO_PUBLIC_ENABLE_EMBEDDED_PAYMENTS !== "false";
   const [reviewDraft, setReviewDraft] = useState({ rating: 5, comment: "" });
   const handleGoBack = useCallback(() => {
     if (router.canGoBack?.()) {
@@ -60,30 +75,102 @@ export function useBookingDetailsActions({
     if (!details?.booking?.id) return;
     router.push({ pathname: "/booking/[bookingId]/chat", params: { bookingId: details.booking.id } } as any);
   }, [details?.booking?.id, router]);
+
+  const handleEmbeddedPaymentSuccess = useCallback(
+    async (paymentIntentId?: string) => {
+      if (!webPaymentId) return;
+      try {
+        await confirmEmbeddedPaymentServerSync({
+          paymentId: webPaymentId,
+          stripePaymentIntentId: paymentIntentId,
+        });
+        setWebPaymentOpen(false);
+        setWebPaymentClientSecret(null);
+        setWebPaymentId(null);
+      } catch (error) {
+        toast.error(toLocalizedErrorMessage(error, t, "apiErrors.default"));
+      }
+    },
+    [confirmEmbeddedPaymentServerSync, t, toast, webPaymentId],
+  );
+
+  const handleCloseWebPayment = useCallback(() => {
+    setWebPaymentOpen(false);
+    setWebPaymentClientSecret(null);
+    setWebPaymentId(null);
+  }, []);
+
+  const handleEmbeddedPaymentError = useCallback(
+    (message: string) => {
+      toast.error(message || t("apiErrors.default"));
+    },
+    [t, toast],
+  );
+
   const handlePayNow = useCallback(async () => {
     if (!details?.booking?.id) return;
     setPendingPayNow(true);
     try {
-      const isWeb = typeof window !== "undefined";
-      const webOrigin = isWeb ? window.location.origin : null;
-      const successUrl = webOrigin
-        ? `${webOrigin}/trips?checkout=success&session_id={CHECKOUT_SESSION_ID}`
-        : ExpoLinking.createURL("/trips?checkout=success&session_id={CHECKOUT_SESSION_ID}");
-      const cancelUrl = webOrigin
-        ? `${webOrigin}/trips?checkout=cancelled`
-        : ExpoLinking.createURL("/trips?checkout=cancelled");
-      const checkout = await createReservationPayNowSession({ bookingId: details.booking.id as any, successUrl, cancelUrl });
-      if (isWeb) {
-        window.location.href = checkout.url;
+      if (!embeddedPaymentsEnabled) {
+        const isWeb = typeof window !== "undefined";
+        const webOrigin = isWeb ? window.location.origin : null;
+        const successUrl = webOrigin
+          ? `${webOrigin}/trips?checkout=success&session_id={CHECKOUT_SESSION_ID}`
+          : ExpoLinking.createURL("/trips?checkout=success&session_id={CHECKOUT_SESSION_ID}");
+        const cancelUrl = webOrigin
+          ? `${webOrigin}/trips?checkout=cancelled`
+          : ExpoLinking.createURL("/trips?checkout=cancelled");
+        const checkout = await createReservationPayNowSession({ bookingId: details.booking.id as any, successUrl, cancelUrl });
+        if (isWeb) {
+          window.location.href = checkout.url;
+          return;
+        }
+        await ExpoLinking.openURL(checkout.url);
         return;
       }
-      await ExpoLinking.openURL(checkout.url);
+
+      const embedded = await createEmbeddedPayNowIntent({ bookingId: details.booking.id as any });
+      const isWeb = typeof window !== "undefined";
+      if (isWeb) {
+        setWebPaymentId(embedded.paymentId);
+        setWebPaymentClientSecret(embedded.paymentIntentClientSecret);
+        setWebPaymentOpen(true);
+        return;
+      }
+
+      const init = await initPaymentSheet({
+        merchantDisplayName: "DriveShare",
+        paymentIntentClientSecret: embedded.paymentIntentClientSecret,
+      });
+      if (init.error) {
+        throw new Error(init.error.message || "Payment sheet init failed.");
+      }
+      const presented = await presentPaymentSheet();
+      if (presented.error) {
+        throw new Error(presented.error.message || "Payment sheet failed.");
+      }
+      await confirmEmbeddedPaymentServerSync({ paymentId: embedded.paymentId });
     } catch (error) {
-      toast.error(toLocalizedErrorMessage(error, t, "apiErrors.default"));
+      const raw = error instanceof Error ? error.message : "";
+      if (raw.startsWith("HOST_PAYOUTS_NOT_READY:")) {
+        toast.error(toLocalizedErrorMessage(error, t, "apiErrors.HOST_PAYOUTS_NOT_READY"));
+      } else {
+        toast.error(toLocalizedErrorMessage(error, t, "apiErrors.default"));
+      }
     } finally {
       setPendingPayNow(false);
     }
-  }, [createReservationPayNowSession, details?.booking?.id, t, toast]);
+  }, [
+    confirmEmbeddedPaymentServerSync,
+    createEmbeddedPayNowIntent,
+    createReservationPayNowSession,
+    details?.booking?.id,
+    embeddedPaymentsEnabled,
+    initPaymentSheet,
+    presentPaymentSheet,
+    t,
+    toast,
+  ]);
   const handleCancelReservation = useCallback(async () => {
     if (!details?.booking?.id) return;
     setPendingCancel(true);
@@ -147,6 +234,11 @@ export function useBookingDetailsActions({
     openUserProfile,
     handleOpenChat,
     handlePayNow,
+    webPaymentOpen,
+    webPaymentClientSecret,
+    handleEmbeddedPaymentSuccess,
+    handleCloseWebPayment,
+    handleEmbeddedPaymentError,
     handleConfirmTripStartCollection,
     handleCancelReservation,
     handleRetryPayout,

@@ -25,6 +25,8 @@ export function useTripsScreenState() {
   const trips = useQuery(bookingsApi.listMyTripsWithPayments, isSignedIn ? {} : "skip");
   const cancelReservation = useMutation(bookingsApi.cancelReservation) as any;
   const createReservationPayNowSession = useAction(bookingsApi.createReservationPayNowSession) as any;
+  const createEmbeddedPayNowIntent = useAction(bookingsApi.createEmbeddedPayNowIntent) as any;
+  const confirmEmbeddedPaymentServerSync = useAction(bookingsApi.confirmEmbeddedPaymentServerSync) as any;
   const reconcileCheckoutSessionFromRedirect = useAction(
     bookingsApi.reconcileCheckoutSessionFromRedirect,
   ) as any;
@@ -43,6 +45,8 @@ export function useTripsScreenState() {
     router,
     cancelReservation,
     createReservationPayNowSession,
+    createEmbeddedPayNowIntent,
+    confirmEmbeddedPaymentServerSync,
     toast,
   });
 

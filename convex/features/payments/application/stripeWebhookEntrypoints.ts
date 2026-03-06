@@ -242,6 +242,15 @@ export const handleStripeWebhookInternal = internalAction({
     const event = JSON.parse(args.rawBody as string) as StripeEvent;
     const object = event.data?.object ?? {};
 
+    console.log(
+      JSON.stringify({
+        source: "stripe.webhook.received",
+        eventId: event.id,
+        eventType: event.type,
+        objectId: typeof object?.id === "string" ? object.id : null,
+      }),
+    );
+
     switch (event.type) {
       case "checkout.session.completed": {
         const sessionId = typeof object.id === "string" ? object.id : "";
@@ -472,49 +481,93 @@ export const handleStripeWebhookInternal = internalAction({
       }
       case "identity.verification_session.processing": {
         if (typeof object.id === "string") {
-          await ctx.runMutation(internal.verification.updateCheckFromProviderSessionInternal, {
+          const userIdHint = readMetadataString(object?.metadata, "userId") ?? undefined;
+          const result = await ctx.runMutation(internal.verification.updateCheckFromProviderSessionInternal, {
             providerSessionId: object.id,
             subjectType: "renter",
             checkType: "driver_license",
             provider: "stripe",
             status: "pending",
+            userIdHint,
           });
+          console.log(
+            JSON.stringify({
+              source: "stripe.webhook.identity.verification_session.processing",
+              eventId: event.id,
+              sessionId: object.id,
+              userIdHint: userIdHint ?? null,
+              updated: Boolean(result?.updated),
+              created: Boolean(result?.created),
+            }),
+          );
         }
         break;
       }
       case "identity.verification_session.verified": {
         if (typeof object.id === "string") {
-          await ctx.runMutation(internal.verification.updateCheckFromProviderSessionInternal, {
+          const userIdHint = readMetadataString(object?.metadata, "userId") ?? undefined;
+          const result = await ctx.runMutation(internal.verification.updateCheckFromProviderSessionInternal, {
             providerSessionId: object.id,
             subjectType: "renter",
             checkType: "driver_license",
             provider: "stripe",
             status: "verified",
+            userIdHint,
           });
+          console.log(
+            JSON.stringify({
+              source: "stripe.webhook.identity.verification_session.verified",
+              eventId: event.id,
+              sessionId: object.id,
+              userIdHint: userIdHint ?? null,
+              updated: Boolean(result?.updated),
+              created: Boolean(result?.created),
+            }),
+          );
         }
         break;
       }
       case "identity.verification_session.requires_input":
       case "identity.verification_session.canceled": {
         if (typeof object.id === "string") {
+          const userIdHint = readMetadataString(object?.metadata, "userId") ?? undefined;
           const rejectionReason =
             typeof object?.last_error?.reason === "string"
               ? object.last_error.reason
               : event.type === "identity.verification_session.canceled"
                 ? "canceled"
                 : "requires_input";
-          await ctx.runMutation(internal.verification.updateCheckFromProviderSessionInternal, {
+          const result = await ctx.runMutation(internal.verification.updateCheckFromProviderSessionInternal, {
             providerSessionId: object.id,
             subjectType: "renter",
             checkType: "driver_license",
             provider: "stripe",
             status: "rejected",
             rejectionReason,
+            userIdHint,
           });
+          console.log(
+            JSON.stringify({
+              source: `stripe.webhook.${event.type}`,
+              eventId: event.id,
+              sessionId: object.id,
+              userIdHint: userIdHint ?? null,
+              rejectionReason,
+              updated: Boolean(result?.updated),
+              created: Boolean(result?.created),
+            }),
+          );
         }
         break;
       }
       default:
+        console.log(
+          JSON.stringify({
+            source: "stripe.webhook.unhandled_event",
+            eventId: event.id,
+            eventType: event.type,
+          }),
+        );
         break;
     }
 

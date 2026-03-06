@@ -10,4 +10,5 @@ export const profileApi = {
   createHostOnboardingLink: api.stripeConnect.createHostOnboardingLink,
   refreshHostConnectStatus: api.stripeConnect.refreshHostConnectStatus,
   startRenterDriverLicenseCheck: api.verification.startRenterDriverLicenseCheck,
+  syncRenterVerificationSession: api.verification.syncRenterVerificationSession,
 };

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { ToastProvider } from '@/components/feedback/ToastProvider'
+import { StripeAppProvider } from '@/features/payments/ui/StripeAppProvider'
 import { initI18n } from '@/lib/i18n'
 import {
   applyThemePreference,
@@ -25,6 +26,7 @@ if (!process.env.EXPO_PUBLIC_CONVEX_URL) {
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL, {
   unsavedChangesWarning: false,
 })
+const stripePublishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ''
 
 export default function RootLayout() {
   const [isI18nReady, setIsI18nReady] = useState(false)
@@ -48,16 +50,18 @@ export default function RootLayout() {
 
   return (
     <ConvexBetterAuthProvider client={convex} authClient={authClient}>
-      <ToastProvider>
-        <SafeAreaView
-          className="flex-1 bg-background"
-          style={themeVars}
-          edges={['top', 'left', 'right']}
-        >
-          <Stack screenOptions={{ headerShown: false }} />
-          <PortalHost />
-        </SafeAreaView>
-      </ToastProvider>
+      <StripeAppProvider publishableKey={stripePublishableKey}>
+        <ToastProvider>
+          <SafeAreaView
+            className="flex-1 bg-background"
+            style={themeVars}
+            edges={['top', 'left', 'right']}
+          >
+            <Stack screenOptions={{ headerShown: false }} />
+            <PortalHost />
+          </SafeAreaView>
+        </ToastProvider>
+      </StripeAppProvider>
     </ConvexBetterAuthProvider>
   )
 }

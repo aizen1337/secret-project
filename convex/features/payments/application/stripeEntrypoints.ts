@@ -154,6 +154,33 @@ function buildPaymentSessionBody(args: {
   return body;
 }
 
+function buildEmbeddedPaymentIntentBody(args: {
+  amount: number;
+  currency: string;
+  paymentId: string;
+  bookingId: string;
+  paymentPurpose: "embedded_booking_payment" | "embedded_pay_now";
+  hostStripeConnectAccountId: string;
+  serviceFee: number;
+  customerId?: string | null;
+}) {
+  const body = new URLSearchParams({
+    amount: String(Math.round(args.amount * 100)),
+    currency: args.currency,
+    capture_method: "manual",
+    "automatic_payment_methods[enabled]": "true",
+    "metadata[paymentId]": args.paymentId,
+    "metadata[bookingId]": args.bookingId,
+    "metadata[paymentPurpose]": args.paymentPurpose,
+  });
+  if (args.customerId) {
+    body.set("customer", args.customerId);
+  }
+  body.set("application_fee_amount", String(Math.round(args.serviceFee * 100)));
+  body.set("transfer_data[destination]", args.hostStripeConnectAccountId);
+  return body;
+}
+
 async function ensureStripeCustomerForRenter(ctx: any, args: {
   renterId: string;
   paymentId: string;
@@ -635,6 +662,7 @@ export const createPendingBookingPaymentInternal = internalMutation({
     collectionMethod: v.optional(
       v.union(v.literal("in_person"), v.literal("lockbox"), v.literal("host_delivery")),
     ),
+    flow: v.optional(v.union(v.literal("legacy_checkout"), v.literal("embedded"))),
   },
   async handler(ctx, args) {
     const user = await mapClerkUser(ctx);
@@ -690,6 +718,10 @@ export const createPendingBookingPaymentInternal = internalMutation({
       throw new Error("UNAUTHORIZED: You cannot book your own listing.");
     }
     const hostPaymentStrategy = resolvePaymentStrategyForHost(host);
+    const flow = args.flow ?? "legacy_checkout";
+    if (flow === "embedded" && hostPaymentStrategy !== "destination_manual_capture") {
+      throw new Error("HOST_PAYOUTS_NOT_READY: Host payouts are not fully configured.");
+    }
 
     const collectionMethod = resolveSelectedCollectionMethod({
       requested: args.collectionMethod,
@@ -709,9 +741,11 @@ export const createPendingBookingPaymentInternal = internalMutation({
     const paymentDueAt = startTs - DAY_MS;
     const requiresImmediatePayment = paymentDueAt <= Date.now();
     const paymentStrategy: PaymentStrategy =
-      hostPaymentStrategy === "destination_manual_capture" && requiresImmediatePayment
-        ? "platform_transfer_fallback"
-        : hostPaymentStrategy;
+      flow === "embedded"
+        ? "destination_manual_capture"
+        : hostPaymentStrategy === "destination_manual_capture" && requiresImmediatePayment
+          ? "platform_transfer_fallback"
+          : hostPaymentStrategy;
     const releaseAt = endTs;
     const depositClaimWindowEndsAt = releaseAt + DEPOSIT_CLAIM_WINDOW_MS;
     const now = Date.now();
@@ -785,6 +819,220 @@ export const createPendingBookingPaymentInternal = internalMutation({
       totalAmount: rentalAmount + platformFeeAmount + depositAmount,
       paymentDueAt,
       requiresImmediatePayment,
+    };
+  },
+});
+
+export const createEmbeddedPaymentIntent = action({
+  args: {
+    offerId: v.id("car_offers"),
+    startDate: v.string(),
+    endDate: v.string(),
+    collectionMethod: v.optional(
+      v.union(v.literal("in_person"), v.literal("lockbox"), v.literal("host_delivery")),
+    ),
+  },
+  async handler(ctx, args) {
+    if (process.env.ENABLE_CONNECT_PAYOUTS === "false") {
+      throw new Error("Connect payouts are currently disabled.");
+    }
+    const useEmbeddedPayments = process.env.ENABLE_EMBEDDED_PAYMENTS !== "false";
+    if (!useEmbeddedPayments) {
+      throw new Error("EMBEDDED_PAYMENTS_DISABLED: Embedded payments are disabled.");
+    }
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("You must be signed in to continue checkout.");
+    }
+    await assertRenterCanBook(ctx);
+
+    const pending = await ctx.runMutation(internalApi.stripe.createPendingBookingPaymentInternal, {
+      offerId: args.offerId,
+      startDate: args.startDate,
+      endDate: args.endDate,
+      currency: "usd",
+      collectionMethod: args.collectionMethod,
+      flow: "embedded",
+    });
+
+    if (!pending.hostStripeConnectAccountId) {
+      throw new Error("HOST_PAYOUTS_NOT_READY: Host payouts are not fully configured.");
+    }
+
+    const stripeCustomerId = await ensureStripeCustomerForRenter(ctx, {
+      renterId: String(pending.renterId),
+      paymentId: String(pending.paymentId),
+      existingStripeCustomerId: pending.renterStripeCustomerId ?? null,
+      clerkUserId: identity.subject,
+    });
+
+    const body = buildEmbeddedPaymentIntentBody({
+      amount: pending.totalAmount,
+      currency: "usd",
+      paymentId: String(pending.paymentId),
+      bookingId: String(pending.bookingId),
+      paymentPurpose: "embedded_booking_payment",
+      hostStripeConnectAccountId: pending.hostStripeConnectAccountId,
+      serviceFee: pending.platformFeeAmount,
+      customerId: stripeCustomerId,
+    });
+    const payload = await stripeFormRequest(
+      "payment_intents",
+      body,
+      `embedded-booking-${String(pending.paymentId)}-${Date.now()}`,
+    );
+    const clientSecret = typeof payload.client_secret === "string" ? payload.client_secret : "";
+    const paymentIntentId = typeof payload.id === "string" ? payload.id : "";
+    if (!clientSecret || !paymentIntentId) {
+      throw new Error("Stripe PaymentIntent client secret is missing.");
+    }
+
+    await ctx.runMutation(internalApi.stripe.attachEmbeddedPaymentIntentInternal, {
+      paymentId: pending.paymentId,
+      bookingId: pending.bookingId,
+      stripePaymentIntentId: paymentIntentId,
+    });
+
+    console.log(
+      JSON.stringify({
+        source: "stripe.embedded.create",
+        flow: "booking",
+        paymentId: String(pending.paymentId),
+        bookingId: String(pending.bookingId),
+        hostId: String(pending.hostId),
+        paymentStrategy: "destination_manual_capture",
+      }),
+    );
+
+    return {
+      paymentId: pending.paymentId,
+      bookingId: pending.bookingId,
+      paymentIntentClientSecret: clientSecret,
+      stripeCustomerId,
+      rentalAmount: pending.rentalAmount,
+      platformFeeAmount: pending.platformFeeAmount,
+      depositAmount: pending.depositAmount,
+      total: pending.totalAmount,
+      paymentStrategy: "destination_manual_capture" as const,
+    };
+  },
+});
+
+export const createEmbeddedPayNowIntent = action({
+  args: {
+    bookingId: v.id("bookings"),
+  },
+  async handler(ctx, args) {
+    if (process.env.ENABLE_CONNECT_PAYOUTS === "false") {
+      throw new Error("Connect payouts are currently disabled.");
+    }
+    const useEmbeddedPayments = process.env.ENABLE_EMBEDDED_PAYMENTS !== "false";
+    if (!useEmbeddedPayments) {
+      throw new Error("EMBEDDED_PAYMENTS_DISABLED: Embedded payments are disabled.");
+    }
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("UNAUTHORIZED: You must be signed in.");
+    }
+    await assertRenterCanBook(ctx);
+
+    const prepared = await ctx.runMutation(internalApi.stripe.prepareReservationPayNowInternal, {
+      bookingId: args.bookingId,
+    });
+    if (prepared.paymentStrategy !== "destination_manual_capture" || !prepared.hostStripeConnectAccountId) {
+      throw new Error("HOST_PAYOUTS_NOT_READY: Host payouts are not fully configured.");
+    }
+
+    const stripeCustomerId = await ensureStripeCustomerForRenter(ctx, {
+      renterId: String(prepared.renterId),
+      paymentId: String(prepared.paymentId),
+      existingStripeCustomerId: prepared.stripeCustomerId ?? null,
+      clerkUserId: identity.subject,
+    });
+
+    const body = buildEmbeddedPaymentIntentBody({
+      amount: prepared.totalAmount,
+      currency: "usd",
+      paymentId: String(prepared.paymentId),
+      bookingId: String(prepared.bookingId),
+      paymentPurpose: "embedded_pay_now",
+      hostStripeConnectAccountId: prepared.hostStripeConnectAccountId,
+      serviceFee: prepared.platformFeeAmount,
+      customerId: stripeCustomerId,
+    });
+    const payload = await stripeFormRequest(
+      "payment_intents",
+      body,
+      `embedded-pay-now-${String(prepared.paymentId)}-${Date.now()}`,
+    );
+    const clientSecret = typeof payload.client_secret === "string" ? payload.client_secret : "";
+    const paymentIntentId = typeof payload.id === "string" ? payload.id : "";
+    if (!clientSecret || !paymentIntentId) {
+      throw new Error("Stripe PaymentIntent client secret is missing.");
+    }
+
+    await ctx.runMutation(internalApi.stripe.attachEmbeddedPaymentIntentInternal, {
+      paymentId: prepared.paymentId,
+      bookingId: prepared.bookingId,
+      stripePaymentIntentId: paymentIntentId,
+    });
+
+    console.log(
+      JSON.stringify({
+        source: "stripe.embedded.create",
+        flow: "pay_now",
+        paymentId: String(prepared.paymentId),
+        bookingId: String(prepared.bookingId),
+        hostId: String(prepared.hostId),
+        paymentStrategy: "destination_manual_capture",
+      }),
+    );
+
+    return {
+      paymentId: prepared.paymentId,
+      bookingId: prepared.bookingId,
+      paymentIntentClientSecret: clientSecret,
+      stripeCustomerId,
+      rentalAmount: prepared.rentalAmount,
+      platformFeeAmount: prepared.platformFeeAmount,
+      depositAmount: prepared.depositAmount,
+      total: prepared.totalAmount,
+      paymentStrategy: "destination_manual_capture" as const,
+    };
+  },
+});
+
+export const confirmEmbeddedPaymentServerSync = action({
+  args: {
+    paymentId: v.string(),
+    stripePaymentIntentId: v.optional(v.string()),
+  },
+  async handler(ctx, args) {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("UNAUTHORIZED: You must be signed in.");
+    }
+    const eventId = `embedded-sync-${args.paymentId}-${Date.now()}`;
+    const result = await ctx.runMutation(internalApi.stripe.markPaymentPaidByPaymentIdInternal, {
+      paymentId: args.paymentId,
+      stripePaymentIntentId: args.stripePaymentIntentId,
+      eventId,
+    });
+    const payment = await ctx.runQuery(internalApi.stripe.getPaymentByIdInternal, {
+      paymentId: args.paymentId,
+    });
+    const bookingStatus =
+      payment?.bookingId
+        ? await ctx.runQuery(internalApi.stripe.getBookingStatusByIdInternal, {
+            bookingId: String(payment.bookingId),
+          })
+        : null;
+    return {
+      ok: Boolean(result?.ok),
+      reason: result?.reason ?? null,
+      paymentStatus: payment?.status ?? null,
+      bookingStatus,
     };
   },
 });
@@ -1170,6 +1418,28 @@ export const updateHostStripeStatusInternal = internalMutation({
       stripeChargesEnabled: args.stripeChargesEnabled,
       stripePayoutsEnabled: args.stripePayoutsEnabled,
       ...requirementsPatch,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const attachEmbeddedPaymentIntentInternal = internalMutation({
+  args: {
+    paymentId: v.id("payments"),
+    bookingId: v.id("bookings"),
+    stripePaymentIntentId: v.string(),
+  },
+  async handler(ctx, args) {
+    const syntheticCheckoutId = `embedded_pi_${args.stripePaymentIntentId}`;
+    await ctx.db.patch(args.paymentId, {
+      stripePaymentIntentId: args.stripePaymentIntentId,
+      stripeCheckoutSessionId: syntheticCheckoutId,
+      status: "checkout_created",
+      updatedAt: Date.now(),
+    });
+    await ctx.db.patch(args.bookingId, {
+      checkoutSessionId: syntheticCheckoutId,
+      status: "payment_pending",
       updatedAt: Date.now(),
     });
   },
@@ -1703,6 +1973,23 @@ export const getPaymentByIdInternal = internalQuery({
   async handler(ctx, args) {
     try {
       return await ctx.db.get(args.paymentId as any);
+    } catch {
+      return null;
+    }
+  },
+});
+
+export const getBookingStatusByIdInternal = internalQuery({
+  args: {
+    bookingId: v.string(),
+  },
+  async handler(ctx, args) {
+    try {
+      const booking = await ctx.db.get(args.bookingId as any);
+      const status = booking && typeof (booking as any).status === "string"
+        ? String((booking as any).status)
+        : null;
+      return status;
     } catch {
       return null;
     }

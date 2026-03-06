@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useColorScheme } from "nativewind";
-import { Link } from "expo-router";
+import { Link, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useHostDashboardScreenState } from "@/features/host-dashboard/hooks/useHostDashboardScreenState";
 import { HostDashboardContent } from "@/features/host-dashboard/ui/HostDashboardContent";
+import { HostPayoutCard } from "@/features/profile/ui/HostPayoutCard";
 import { getTokenColor, resolveThemeMode } from "@/lib/themeTokens";
 
 function CenterLayout({ children }: { children: ReactNode }) {
@@ -21,6 +22,7 @@ function CenterLayout({ children }: { children: ReactNode }) {
 export default function HostDashboardScreen() {
   const { t } = useTranslation();
   const mode = resolveThemeMode(useColorScheme());
+  const { connect } = useLocalSearchParams<{ connect?: string }>();
   const state = useHostDashboardScreenState();
 
   if (!state.isLoaded || state.hostPayoutStatus === undefined) {
@@ -50,24 +52,22 @@ export default function HostDashboardScreen() {
 
   if (!state.hostVerified) {
     return (
-      <CenterLayout>
-        <View className="w-20 h-20 bg-secondary rounded-full items-center justify-center mb-4">
-          <Ionicons name="shield-checkmark-outline" size={40} color={getTokenColor(mode, "iconMuted")} />
+      <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
+        <View className="flex-1 px-4 pt-4">
+          <View className="w-20 h-20 bg-secondary rounded-full items-center justify-center mb-4 self-center">
+            <Ionicons name="shield-checkmark-outline" size={40} color={getTokenColor(mode, "iconMuted")} />
+          </View>
+          <Text className="text-xl font-semibold text-foreground mb-2 text-center">
+            {t("dashboard.hostVerificationRequiredTitle")}
+          </Text>
+          <Text className="text-base text-muted-foreground text-center mb-6">
+            {t("dashboard.hostVerificationRequiredSubtitle")}
+          </Text>
+          <HostPayoutCard connect={connect} />
         </View>
-        <Text className="text-xl font-semibold text-foreground mb-2 text-center">
-          {t("dashboard.hostVerificationRequiredTitle")}
-        </Text>
-        <Text className="text-base text-muted-foreground text-center mb-6">
-          {t("dashboard.hostVerificationRequiredSubtitle")}
-        </Text>
-        <Link href="/profile/payments" asChild>
-          <Pressable className="bg-primary px-6 py-3 rounded-xl">
-            <Text className="text-primary-foreground font-semibold text-base">{t("common.actions.setUpPayouts")}</Text>
-          </Pressable>
-        </Link>
-      </CenterLayout>
+      </SafeAreaView>
     );
   }
 
-  return <HostDashboardContent state={state} mode={mode} />;
+  return <HostDashboardContent state={state} mode={mode} section="menu" connect={connect} />;
 }

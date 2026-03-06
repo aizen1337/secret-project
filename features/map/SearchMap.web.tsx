@@ -7,6 +7,8 @@ import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 
 import type { SearchMapProps } from "./SearchMap";
 
+const TILE_LAYER_URL = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+
 function FitToCars({
   cars,
   region,
@@ -130,7 +132,7 @@ export function SearchMap({
           attributionControl={false}
         >
           <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            url={TILE_LAYER_URL}
             subdomains={["a", "b", "c"]}
           />
           <FitToCars cars={cars} region={region} fitToCars={fitToCars} />

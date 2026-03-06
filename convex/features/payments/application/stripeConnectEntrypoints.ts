@@ -108,6 +108,17 @@ async function createConnectAccountLink(args: {
     body.set("collection_options[future_requirements]", "include");
   }
   const accountLink = await stripeFormRequest("account_links", body);
+  console.log(
+    JSON.stringify({
+      source: "stripe.connect.account_link.created",
+      stripeConnectAccountId: args.stripeConnectAccountId,
+      linkType,
+      detailsSubmitted: Boolean(args.account.details_submitted),
+      chargesEnabled: Boolean(args.account.charges_enabled),
+      payoutsEnabled: Boolean(args.account.payouts_enabled),
+      requiredActions: collectRequiredActions(args.account),
+    }),
+  );
   return { url: accountLink.url as string, linkType };
 }
 

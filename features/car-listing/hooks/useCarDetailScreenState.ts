@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "@/convex/_generated/api";
 import { useToast } from "@/components/feedback/useToast";
+import { carListingApi } from "@/features/car-listing/api";
 import { useCarDetailBookingActions } from "@/features/car-listing/hooks/useCarDetailBookingActions";
 import { useCarDetailDerived } from "@/features/car-listing/hooks/useCarDetailDerived";
 import { useCarDetailRouteState } from "@/features/car-listing/hooks/useCarDetailRouteState";
@@ -27,7 +28,9 @@ export function useCarDetailScreenState() {
     api.cars.getCarOfferById,
     routeState.offerId ? { offerId: routeState.offerId } : "skip",
   );
-  const createCheckoutSession = useAction(api.stripe.createCheckoutSession) as any;
+  const createCheckoutSession = useAction(carListingApi.createCheckoutSession) as any;
+  const createEmbeddedPaymentIntent = useAction(carListingApi.createEmbeddedPaymentIntent) as any;
+  const confirmEmbeddedPaymentServerSync = useAction(carListingApi.confirmEmbeddedPaymentServerSync) as any;
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [selectedCollectionMethod, setSelectedCollectionMethod] = useState<CollectionMethod>("in_person");
   const galleryRef = useRef<FlatList<string>>(null);
@@ -70,6 +73,8 @@ export function useCarDetailScreenState() {
     startIso: derived.startIso,
     endIso: derived.endIso,
     createCheckoutSession,
+    createEmbeddedPaymentIntent,
+    confirmEmbeddedPaymentServerSync,
     selectedCollectionMethod,
   });
 

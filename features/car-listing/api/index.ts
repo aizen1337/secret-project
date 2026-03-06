@@ -10,4 +10,6 @@ export const carListingApi = {
   resolveAddressDetails: api.cars.resolveAddressDetails,
   verifyAndAutofillCarFromVin: api.cars.verifyAndAutofillCarFromVin,
   createCheckoutSession: api.stripe.createCheckoutSession,
+  createEmbeddedPaymentIntent: (api as any).stripe.createEmbeddedPaymentIntent,
+  confirmEmbeddedPaymentServerSync: (api as any).stripe.confirmEmbeddedPaymentServerSync,
 };

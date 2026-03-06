@@ -48,6 +48,19 @@ function getVerificationRecertDays() {
   return Math.floor(parsed);
 }
 
+async function findUserByAuthSubjectOrLegacyClerkId(ctx: any, authSubject: string) {
+  const byAuthSubject = await ctx.db
+    .query("users")
+    .withIndex("by_auth_subject", (q: any) => q.eq("authSubject", authSubject))
+    .first();
+  if (byAuthSubject) return byAuthSubject;
+
+  return await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q: any) => q.eq("clerkUserId", authSubject))
+    .first();
+}
+
 async function resolveChecksForUser(ctx: any, userId: any) {
   const checks = defaultChecks();
   let rejectionReason: string | undefined;
@@ -57,7 +70,18 @@ async function resolveChecksForUser(ctx: any, userId: any) {
     .withIndex("by_user_subject", (q: any) => q.eq("userId", userId).eq("subjectType", "renter"))
     .collect();
 
+  const latestByCheck = new Map<VerificationCheckType, any>();
   for (const row of genericChecks) {
+    const checkType = row.checkType as VerificationCheckType;
+    const previous = latestByCheck.get(checkType);
+    const rowTs = Number(row.updatedAt ?? row._creationTime ?? 0);
+    const previousTs = Number(previous?.updatedAt ?? previous?._creationTime ?? -1);
+    if (!previous || rowTs >= previousTs) {
+      latestByCheck.set(checkType, row);
+    }
+  }
+
+  for (const row of latestByCheck.values()) {
     checks[row.checkType as VerificationCheckType] = row.status as VerificationStatus;
     if (!rejectionReason && row.status === "rejected" && row.rejectionReason) {
       rejectionReason = row.rejectionReason;
@@ -116,10 +140,7 @@ async function upsertGenericCheck(
 
 async function getRenterVerificationSummaryForClerk(ctx: any, clerkUserId: string) {
   const enabled = isRenterVerificationEnabled();
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkUserId", clerkUserId))
-    .first();
+  const user = await findUserByAuthSubjectOrLegacyClerkId(ctx, clerkUserId);
 
   if (!user) {
     const checks = defaultChecks();
@@ -310,10 +331,7 @@ export const getLatestRenterSessionIdForClerkInternal = internalQuery({
     clerkUserId: v.string(),
   },
   async handler(ctx, args): Promise<{ sessionId: string; checkType: VerificationCheckType } | null> {
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q: any) => q.eq("clerkUserId", args.clerkUserId))
-      .first();
+    const user = await findUserByAuthSubjectOrLegacyClerkId(ctx, args.clerkUserId);
     if (!user) return null;
 
     const rows = await ctx.db
@@ -363,7 +381,7 @@ export const syncRenterVerificationSession = action({
         ? await mobywatelVerificationSessionCache.fetch(ctx, { sessionId: resolved })
         : await stripeVerificationSessionCache.fetch(ctx, { sessionId: resolved });
 
-    await ctx.runMutation(unsafeInternal.verification.updateCheckFromProviderSessionInternal, {
+    const updateResult = await ctx.runMutation(unsafeInternal.verification.updateCheckFromProviderSessionInternal, {
       providerSessionId: resolved,
       subjectType: "renter",
       checkType: "driver_license",
@@ -371,6 +389,36 @@ export const syncRenterVerificationSession = action({
       status: toInternalVerificationStatus(String(session.status)),
       rejectionReason: typeof session?.rejectionReason === "string" ? session.rejectionReason : undefined,
     });
+
+    if (!updateResult?.updated) {
+      const user = await ctx.runMutation(unsafeInternal.verification.ensureUserForVerificationInternal, {});
+      await ctx.runMutation(unsafeInternal.verification.upsertCheckSessionInternal, {
+        userId: user._id,
+        subjectType: "renter",
+        checkType: "driver_license",
+        provider,
+        providerSessionId: resolved,
+      });
+      await ctx.runMutation(unsafeInternal.verification.updateCheckFromProviderSessionInternal, {
+        providerSessionId: resolved,
+        subjectType: "renter",
+        checkType: "driver_license",
+        provider,
+        status: toInternalVerificationStatus(String(session.status)),
+        rejectionReason: typeof session?.rejectionReason === "string" ? session.rejectionReason : undefined,
+      });
+    }
+
+    console.log(
+      JSON.stringify({
+        source: "verification.sync.renter",
+        provider,
+        sessionId: resolved,
+        providerStatus: String(session.status),
+        mappedStatus: toInternalVerificationStatus(String(session.status)),
+        updatedExistingRow: Boolean(updateResult?.updated),
+      }),
+    );
 
     return {
       sessionId: resolved,
@@ -433,6 +481,7 @@ export const updateCheckFromProviderSessionInternal = internalMutation({
     provider: v.union(v.literal("stripe"), v.literal("mobywatel")),
     status: v.union(v.literal("pending"), v.literal("verified"), v.literal("rejected")),
     rejectionReason: v.optional(v.string()),
+    userIdHint: v.optional(v.string()),
   },
   async handler(ctx, args) {
     const bySession = await ctx.db
@@ -446,7 +495,32 @@ export const updateCheckFromProviderSessionInternal = internalMutation({
       ) ?? null;
 
     if (!target) {
-      return { updated: false };
+      if (!args.userIdHint) {
+        return { updated: false, created: false };
+      }
+
+      let hintedUser: any = null;
+      try {
+        hintedUser = await ctx.db.get(args.userIdHint as any);
+      } catch {
+        hintedUser = null;
+      }
+      if (!hintedUser) {
+        return { updated: false, created: false };
+      }
+
+      const now = Date.now();
+      await upsertGenericCheck(ctx, {
+        userId: hintedUser._id,
+        subjectType: args.subjectType,
+        checkType: args.checkType,
+        status: args.status,
+        provider: args.provider,
+        providerSessionId: args.providerSessionId,
+        rejectionReason: args.status === "rejected" ? args.rejectionReason : undefined,
+        verifiedAt: args.status === "verified" ? now : undefined,
+      });
+      return { updated: true, created: true };
     }
 
     const now = Date.now();
@@ -458,7 +532,7 @@ export const updateCheckFromProviderSessionInternal = internalMutation({
       updatedAt: now,
     });
 
-    return { updated: true };
+    return { updated: true, created: false };
   },
 });
 

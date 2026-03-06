@@ -1,7 +1,8 @@
 import { Pressable, Text, View } from "react-native";
 import { useAction, useQuery } from "convex/react";
 import * as ExpoLinking from "expo-linking";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/feedback/useToast";
 import { profileApi } from "@/features/profile/api";
@@ -11,9 +12,45 @@ import { verificationBadge } from "./verificationUi";
 export function RenterVerificationCard() {
   const { t } = useTranslation();
   const toast = useToast();
+  const params = useLocalSearchParams<{ verification?: string | string[] }>();
+  const verificationParam = Array.isArray(params.verification) ? params.verification[0] : params.verification;
   const renterVerification = useQuery(profileApi.getMyRenterVerificationStatus);
   const startRenterDriverLicenseCheck = useAction(profileApi.startRenterDriverLicenseCheck);
+  const syncRenterVerificationSession = useAction(profileApi.syncRenterVerificationSession);
   const [isStartingLicenseVerification, setIsStartingLicenseVerification] = useState(false);
+  const handledVerificationReturnRef = useRef(false);
+
+  useEffect(() => {
+    if (verificationParam !== "return" || handledVerificationReturnRef.current) return;
+    handledVerificationReturnRef.current = true;
+    void (async () => {
+      let lastProviderStatus: string | undefined;
+      const maxAttempts = 6;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const result = (await syncRenterVerificationSession({})) as
+          | { providerStatus?: string }
+          | undefined;
+        lastProviderStatus = String(result?.providerStatus ?? "").toLowerCase();
+        const isStillPending =
+          lastProviderStatus === "pending" || lastProviderStatus === "processing";
+        if (!isStillPending) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      toast.success(t("onboarding.messages.verificationRefreshed"));
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("verification") === "return") {
+          url.searchParams.delete("verification");
+          window.history.replaceState({}, "", url.toString());
+        }
+      }
+    })()
+      .catch((error) => {
+        toast.error(toLocalizedErrorMessage(error, t, "onboarding.messages.verificationRefreshFailed"));
+      });
+  }, [syncRenterVerificationSession, t, toast, verificationParam]);
 
   const openExternalUrl = async (url: string) => {
     if (typeof window !== "undefined") {
@@ -23,11 +60,19 @@ export function RenterVerificationCard() {
     await ExpoLinking.openURL(url);
   };
 
+  const createProfileVerificationReturnUrl = () => {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/profile?verification=return`;
+    }
+    return ExpoLinking.createURL("/profile?verification=return");
+  };
+
   const handleStartStripeVerification = async () => {
     setIsStartingLicenseVerification(true);
     try {
       const result = (await startRenterDriverLicenseCheck({
         provider: "stripe",
+        returnUrl: createProfileVerificationReturnUrl(),
       })) as { url: string };
       await openExternalUrl(result.url);
     } catch (error) {
